@@ -7,16 +7,20 @@ Features:
 - DFG calculation and visualization
 - Bottleneck detection
 - Process variant analysis
+- Conformance Twin (SOP comparison)
 """
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
 from collections import defaultdict
+from enum import Enum
+from pydantic import BaseModel, Field
 import random
+import json
 
 
 @dataclass
@@ -335,6 +339,397 @@ def calculate_process_metrics(df: pd.DataFrame) -> Dict:
     }
 
 
+# ============================================
+# Conformance Twin - Pydantic Models & Functions
+# ============================================
+
+class ConformanceStatus(str, Enum):
+    """Conformance check status levels."""
+    COMPLIANT = "compliant"
+    MINOR_DEVIATION = "minor_deviation"
+    MAJOR_DEVIATION = "major_deviation"
+    NON_COMPLIANT = "non_compliant"
+
+
+class ActivityDeviation(BaseModel):
+    """Model for individual activity deviation."""
+    activity: str = Field(..., description="Activity name")
+    deviation_type: str = Field(..., description="Type of deviation: missing, unexpected, sequence_error, timing_breach")
+    expected_value: Optional[str] = Field(None, description="Expected value from SOP")
+    actual_value: Optional[str] = Field(None, description="Actual observed value")
+    severity: str = Field(..., description="Severity: low, medium, high, critical")
+    description: str = Field(..., description="Human-readable description of deviation")
+
+
+class SOPActivity(BaseModel):
+    """Model for SOP activity definition."""
+    name: str = Field(..., description="Activity name")
+    sequence_order: int = Field(..., description="Expected sequence order (1-based)")
+    mandatory: bool = Field(default=True, description="Whether activity is mandatory")
+    max_duration_hours: Optional[float] = Field(None, description="Maximum allowed duration in hours")
+    allowed_predecessors: List[str] = Field(default_factory=list, description="Allowed predecessor activities")
+    allowed_successors: List[str] = Field(default_factory=list, description="Allowed successor activities")
+
+
+class SOPSchema(BaseModel):
+    """Model for Standard Operating Procedure schema."""
+    sop_id: str = Field(..., description="Unique SOP identifier")
+    sop_name: str = Field(..., description="SOP name")
+    version: str = Field(default="1.0", description="SOP version")
+    process_type: str = Field(..., description="Process type: loan_approval, fraud_check, kyc, etc.")
+    activities: List[SOPActivity] = Field(..., description="List of activities in order")
+    max_total_duration_hours: Optional[float] = Field(None, description="Maximum total process duration")
+    strict_sequence: bool = Field(default=False, description="Whether sequence must be strictly followed")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+
+class ConformanceResult(BaseModel):
+    """Model for conformance check result."""
+    case_id: str = Field(..., description="Case identifier")
+    sop_id: str = Field(..., description="SOP identifier compared against")
+    status: ConformanceStatus = Field(..., description="Overall conformance status")
+    conformance_score: float = Field(..., ge=0, le=100, description="Conformance score (0-100)")
+    deviations: List[ActivityDeviation] = Field(default_factory=list, description="List of deviations found")
+    missing_activities: List[str] = Field(default_factory=list, description="Mandatory activities not found")
+    unexpected_activities: List[str] = Field(default_factory=list, description="Activities not in SOP")
+    sequence_violations: List[str] = Field(default_factory=list, description="Sequence order violations")
+    timing_breaches: List[str] = Field(default_factory=list, description="Duration threshold breaches")
+    actual_duration_hours: float = Field(..., description="Actual process duration")
+    timestamp: datetime = Field(default_factory=datetime.now, description="Analysis timestamp")
+
+
+class ConformanceSummary(BaseModel):
+    """Model for aggregated conformance analysis."""
+    sop_id: str = Field(..., description="SOP identifier")
+    total_cases: int = Field(..., description="Total cases analyzed")
+    compliant_cases: int = Field(..., description="Number of fully compliant cases")
+    minor_deviation_cases: int = Field(..., description="Cases with minor deviations")
+    major_deviation_cases: int = Field(..., description="Cases with major deviations")
+    non_compliant_cases: int = Field(..., description="Non-compliant cases")
+    avg_conformance_score: float = Field(..., description="Average conformance score")
+    most_common_deviations: List[str] = Field(default_factory=list, description="Most frequent deviation types")
+    problem_activities: List[str] = Field(default_factory=list, description="Activities with most issues")
+    timestamp: datetime = Field(default_factory=datetime.now, description="Analysis timestamp")
+
+
+# Default Loan Approval SOP Schema
+LOAN_APPROVAL_SOP = SOPSchema(
+    sop_id="SOP-LOAN-001",
+    sop_name="Loan Approval Standard Operating Procedure",
+    version="2.0",
+    process_type="loan_approval",
+    activities=[
+        SOPActivity(
+            name="Application Received",
+            sequence_order=1,
+            mandatory=True,
+            max_duration_hours=4,
+            allowed_predecessors=[],
+            allowed_successors=["Document Verification"]
+        ),
+        SOPActivity(
+            name="Document Verification",
+            sequence_order=2,
+            mandatory=True,
+            max_duration_hours=24,
+            allowed_predecessors=["Application Received"],
+            allowed_successors=["Credit Check"]
+        ),
+        SOPActivity(
+            name="Credit Check",
+            sequence_order=3,
+            mandatory=True,
+            max_duration_hours=8,
+            allowed_predecessors=["Document Verification"],
+            allowed_successors=["Risk Assessment"]
+        ),
+        SOPActivity(
+            name="Risk Assessment",
+            sequence_order=4,
+            mandatory=True,
+            max_duration_hours=48,
+            allowed_predecessors=["Credit Check"],
+            allowed_successors=["Manager Approval", "Escalation Review"]
+        ),
+        SOPActivity(
+            name="Manager Approval",
+            sequence_order=5,
+            mandatory=True,
+            max_duration_hours=12,
+            allowed_predecessors=["Risk Assessment", "Escalation Review"],
+            allowed_successors=["Final Review", "Escalation Review"]
+        ),
+        SOPActivity(
+            name="Escalation Review",
+            sequence_order=5,
+            mandatory=False,
+            max_duration_hours=24,
+            allowed_predecessors=["Risk Assessment", "Manager Approval"],
+            allowed_successors=["Manager Approval", "Final Review"]
+        ),
+        SOPActivity(
+            name="Final Review",
+            sequence_order=6,
+            mandatory=True,
+            max_duration_hours=6,
+            allowed_predecessors=["Manager Approval", "Escalation Review"],
+            allowed_successors=["Loan Disbursement"]
+        ),
+        SOPActivity(
+            name="Loan Disbursement",
+            sequence_order=7,
+            mandatory=True,
+            max_duration_hours=4,
+            allowed_predecessors=["Final Review"],
+            allowed_successors=[]
+        ),
+    ],
+    max_total_duration_hours=120,  # 5 days
+    strict_sequence=False,  # Allow escalation loops
+    metadata={
+        "regulation": "POJK 35/2018",
+        "department": "Credit Operations",
+        "last_updated": "2024-01-15"
+    }
+)
+
+
+def load_sop_schema(json_path: Optional[str] = None) -> SOPSchema:
+    """
+    Load SOP schema from JSON file or return default Loan Approval SOP.
+
+    Args:
+        json_path: Path to JSON file containing SOP schema
+
+    Returns:
+        SOPSchema object
+    """
+    if json_path is None:
+        return LOAN_APPROVAL_SOP
+
+    with open(json_path, "r") as f:
+        data = json.load(f)
+    return SOPSchema(**data)
+
+
+def check_case_conformance(
+    case_events: pd.DataFrame,
+    sop: SOPSchema
+) -> ConformanceResult:
+    """
+    Check conformance of a single case against SOP schema.
+
+    Args:
+        case_events: DataFrame with columns [activity, timestamp] for a single case
+        sop: SOP schema to compare against
+
+    Returns:
+        ConformanceResult object
+    """
+    case_id = case_events["case_id"].iloc[0] if "case_id" in case_events.columns else "unknown"
+
+    # Sort by timestamp
+    sorted_events = case_events.sort_values("timestamp")
+    actual_activities = sorted_events["activity"].tolist()
+    timestamps = sorted_events["timestamp"].tolist()
+
+    # Calculate actual duration
+    if len(timestamps) >= 2:
+        actual_duration = (timestamps[-1] - timestamps[0]).total_seconds() / 3600
+    else:
+        actual_duration = 0
+
+    deviations = []
+    missing_activities = []
+    unexpected_activities = []
+    sequence_violations = []
+    timing_breaches = []
+
+    # Build SOP activity lookup
+    sop_activities = {a.name: a for a in sop.activities}
+    mandatory_activities = {a.name for a in sop.activities if a.mandatory}
+    all_sop_activities = {a.name for a in sop.activities}
+
+    # Check for missing mandatory activities
+    actual_set = set(actual_activities)
+    for mandatory in mandatory_activities:
+        if mandatory not in actual_set:
+            missing_activities.append(mandatory)
+            deviations.append(ActivityDeviation(
+                activity=mandatory,
+                deviation_type="missing",
+                expected_value=mandatory,
+                actual_value=None,
+                severity="high" if mandatory in ["Application Received", "Loan Disbursement"] else "medium",
+                description=f"Mandatory activity '{mandatory}' not found in case"
+            ))
+
+    # Check for unexpected activities
+    for activity in actual_activities:
+        if activity not in all_sop_activities:
+            unexpected_activities.append(activity)
+            deviations.append(ActivityDeviation(
+                activity=activity,
+                deviation_type="unexpected",
+                expected_value=None,
+                actual_value=activity,
+                severity="low",
+                description=f"Activity '{activity}' not defined in SOP"
+            ))
+
+    # Check sequence violations
+    prev_activity = None
+    for i, activity in enumerate(actual_activities):
+        if activity in sop_activities and prev_activity in sop_activities:
+            sop_prev = sop_activities[prev_activity]
+            if sop_prev.allowed_successors and activity not in sop_prev.allowed_successors:
+                violation = f"{prev_activity} -> {activity}"
+                sequence_violations.append(violation)
+                deviations.append(ActivityDeviation(
+                    activity=activity,
+                    deviation_type="sequence_error",
+                    expected_value=f"Expected one of: {', '.join(sop_prev.allowed_successors)}",
+                    actual_value=activity,
+                    severity="medium",
+                    description=f"'{activity}' should not follow '{prev_activity}' per SOP"
+                ))
+        prev_activity = activity
+
+    # Check timing breaches (activity durations)
+    for i in range(len(actual_activities) - 1):
+        activity = actual_activities[i]
+        if activity in sop_activities:
+            sop_activity = sop_activities[activity]
+            if sop_activity.max_duration_hours:
+                duration = (timestamps[i + 1] - timestamps[i]).total_seconds() / 3600
+                if duration > sop_activity.max_duration_hours:
+                    timing_breaches.append(activity)
+                    deviations.append(ActivityDeviation(
+                        activity=activity,
+                        deviation_type="timing_breach",
+                        expected_value=f"<= {sop_activity.max_duration_hours}h",
+                        actual_value=f"{duration:.1f}h",
+                        severity="high" if duration > sop_activity.max_duration_hours * 2 else "medium",
+                        description=f"'{activity}' took {duration:.1f}h, exceeding limit of {sop_activity.max_duration_hours}h"
+                    ))
+
+    # Check total duration
+    if sop.max_total_duration_hours and actual_duration > sop.max_total_duration_hours:
+        deviations.append(ActivityDeviation(
+            activity="TOTAL_PROCESS",
+            deviation_type="timing_breach",
+            expected_value=f"<= {sop.max_total_duration_hours}h",
+            actual_value=f"{actual_duration:.1f}h",
+            severity="high",
+            description=f"Total process duration {actual_duration:.1f}h exceeds limit of {sop.max_total_duration_hours}h"
+        ))
+
+    # Calculate conformance score
+    total_checks = len(mandatory_activities) + len(actual_activities) + 1  # +1 for total duration
+    issues = len(missing_activities) + len(unexpected_activities) + len(sequence_violations) + len(timing_breaches)
+    conformance_score = max(0, 100 - (issues / max(total_checks, 1)) * 100)
+
+    # Determine status
+    if conformance_score >= 95 and len(deviations) == 0:
+        status = ConformanceStatus.COMPLIANT
+    elif conformance_score >= 80 and not any(d.severity in ["high", "critical"] for d in deviations):
+        status = ConformanceStatus.MINOR_DEVIATION
+    elif conformance_score >= 60:
+        status = ConformanceStatus.MAJOR_DEVIATION
+    else:
+        status = ConformanceStatus.NON_COMPLIANT
+
+    return ConformanceResult(
+        case_id=case_id,
+        sop_id=sop.sop_id,
+        status=status,
+        conformance_score=round(conformance_score, 2),
+        deviations=deviations,
+        missing_activities=missing_activities,
+        unexpected_activities=unexpected_activities,
+        sequence_violations=sequence_violations,
+        timing_breaches=timing_breaches,
+        actual_duration_hours=round(actual_duration, 2)
+    )
+
+
+def conformance_twin_analysis(
+    df: pd.DataFrame,
+    sop: Optional[SOPSchema] = None,
+    sop_json_path: Optional[str] = None
+) -> Tuple[ConformanceSummary, List[ConformanceResult]]:
+    """
+    Perform Conformance Twin analysis comparing DFG/event log against SOP schema.
+
+    Args:
+        df: Event log DataFrame with columns [case_id, activity, timestamp]
+        sop: SOPSchema object (uses default Loan Approval if None)
+        sop_json_path: Path to JSON file with SOP schema (alternative to sop parameter)
+
+    Returns:
+        Tuple of (ConformanceSummary, List[ConformanceResult])
+    """
+    # Load SOP
+    if sop is None:
+        sop = load_sop_schema(sop_json_path)
+
+    # Analyze each case
+    results = []
+    for case_id, case_events in df.groupby("case_id"):
+        result = check_case_conformance(case_events, sop)
+        results.append(result)
+
+    # Calculate summary statistics
+    compliant = sum(1 for r in results if r.status == ConformanceStatus.COMPLIANT)
+    minor = sum(1 for r in results if r.status == ConformanceStatus.MINOR_DEVIATION)
+    major = sum(1 for r in results if r.status == ConformanceStatus.MAJOR_DEVIATION)
+    non_compliant = sum(1 for r in results if r.status == ConformanceStatus.NON_COMPLIANT)
+
+    avg_score = sum(r.conformance_score for r in results) / len(results) if results else 0
+
+    # Find most common deviations and problem activities
+    deviation_counts: Dict[str, int] = defaultdict(int)
+    activity_issue_counts: Dict[str, int] = defaultdict(int)
+
+    for result in results:
+        for dev in result.deviations:
+            deviation_counts[dev.deviation_type] += 1
+            activity_issue_counts[dev.activity] += 1
+
+    most_common = sorted(deviation_counts.keys(), key=lambda x: -deviation_counts[x])[:5]
+    problem_activities = sorted(activity_issue_counts.keys(), key=lambda x: -activity_issue_counts[x])[:5]
+
+    summary = ConformanceSummary(
+        sop_id=sop.sop_id,
+        total_cases=len(results),
+        compliant_cases=compliant,
+        minor_deviation_cases=minor,
+        major_deviation_cases=major,
+        non_compliant_cases=non_compliant,
+        avg_conformance_score=round(avg_score, 2),
+        most_common_deviations=most_common,
+        problem_activities=problem_activities
+    )
+
+    return summary, results
+
+
+def export_sop_to_json(sop: SOPSchema, output_path: str) -> str:
+    """
+    Export SOP schema to JSON file.
+
+    Args:
+        sop: SOPSchema object
+        output_path: Path to save JSON file
+
+    Returns:
+        Path to saved file
+    """
+    with open(output_path, "w") as f:
+        json.dump(sop.model_dump(), f, indent=2, default=str)
+    return output_path
+
+
 # Export
 __all__ = [
     "generate_sample_event_log",
@@ -345,5 +740,17 @@ __all__ = [
     "get_process_variants",
     "generate_dfg_graphviz",
     "calculate_process_metrics",
-    "BottleneckInfo"
+    "BottleneckInfo",
+    # Conformance Twin exports
+    "ConformanceStatus",
+    "ActivityDeviation",
+    "SOPActivity",
+    "SOPSchema",
+    "ConformanceResult",
+    "ConformanceSummary",
+    "LOAN_APPROVAL_SOP",
+    "load_sop_schema",
+    "check_case_conformance",
+    "conformance_twin_analysis",
+    "export_sop_to_json",
 ]
