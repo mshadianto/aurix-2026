@@ -59,6 +59,70 @@ from modules.anti_fraud_agent import (
     generate_sample_transactions,
 )
 
+from modules.ijk_benchmarking import (
+    # Enums
+    InstitutionType,
+    MetricCategory,
+    BenchmarkStatus,
+    # Models
+    IndustryBenchmark,
+    EntityMetric,
+    BenchmarkResult,
+    BenchmarkSummary,
+    # Constants
+    BANKING_BENCHMARKS_2024,
+    INSURANCE_BENCHMARKS_2024,
+    # Classes
+    IJKBenchmarkEngine,
+    # Functions
+    generate_sample_entity_metrics,
+)
+
+from modules.stress_tester import (
+    # Enums
+    ScenarioSeverity,
+    RiskType,
+    StressOutcome,
+    # Models
+    PortfolioPosition,
+    StressScenario,
+    StressImpact,
+    ProjectedMetrics,
+    StressTestResult,
+    StressTestSuite,
+    # Constants
+    STRESS_SCENARIOS,
+    REGULATORY_THRESHOLDS,
+    BI_RATE_BASELINE,
+    USDIDR_BASELINE,
+    # Classes
+    MacroStressTester,
+    # Functions
+    generate_sample_portfolio,
+)
+
+from modules.risk_habit_scorecard import (
+    # Enums
+    HabitCategory,
+    HabitFrequency,
+    ScoreLevel,
+    TrendDirection,
+    # Models
+    HabitDefinition,
+    HabitExecution,
+    HabitStreak,
+    UserHabitScore,
+    UserScorecard,
+    TeamScorecard,
+    ComplianceNudge,
+    # Constants
+    RISK_HABITS,
+    # Classes
+    RiskHabitEngine,
+    # Functions
+    generate_sample_executions,
+)
+
 __all__ = [
     # Process Mining - Core
     "generate_sample_event_log",
@@ -104,4 +168,47 @@ __all__ = [
     "HIGH_RISK_COUNTRIES",
     "AntiFraudAgent",
     "generate_sample_transactions",
+    # IJK Benchmarking
+    "InstitutionType",
+    "MetricCategory",
+    "BenchmarkStatus",
+    "IndustryBenchmark",
+    "EntityMetric",
+    "BenchmarkResult",
+    "BenchmarkSummary",
+    "BANKING_BENCHMARKS_2024",
+    "INSURANCE_BENCHMARKS_2024",
+    "IJKBenchmarkEngine",
+    "generate_sample_entity_metrics",
+    # Macro-Financial Stress Tester
+    "ScenarioSeverity",
+    "RiskType",
+    "StressOutcome",
+    "PortfolioPosition",
+    "StressScenario",
+    "StressImpact",
+    "ProjectedMetrics",
+    "StressTestResult",
+    "StressTestSuite",
+    "STRESS_SCENARIOS",
+    "REGULATORY_THRESHOLDS",
+    "BI_RATE_BASELINE",
+    "USDIDR_BASELINE",
+    "MacroStressTester",
+    "generate_sample_portfolio",
+    # Risk Habit Scorecard
+    "HabitCategory",
+    "HabitFrequency",
+    "ScoreLevel",
+    "TrendDirection",
+    "HabitDefinition",
+    "HabitExecution",
+    "HabitStreak",
+    "UserHabitScore",
+    "UserScorecard",
+    "TeamScorecard",
+    "ComplianceNudge",
+    "RISK_HABITS",
+    "RiskHabitEngine",
+    "generate_sample_executions",
 ]

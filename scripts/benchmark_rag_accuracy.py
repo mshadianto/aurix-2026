@@ -118,6 +118,40 @@ AUDIT_TEST_CASES = [
         answer="Menurut POJK 51/2017, target pembiayaan berkelanjutan adalah minimal 20% dari total portofolio pada tahun 2025.",
         ground_truth="Target pembiayaan berkelanjutan POJK 51/2017: minimal 20% pada 2025."
     ),
+    # Stress Test Cases from AURIX Spec v4.2
+    RAGTestCase(
+        question="Klasifikasi nasabah batu bara dengan 30% transisi EBT.",
+        contexts=[
+            "POJK Nomor 6/POJK.03/2022 tentang Taksonomi Hijau Indonesia mengklasifikasikan kegiatan ekonomi berdasarkan dampak lingkungan. Kegiatan BROWN adalah kegiatan yang merusak lingkungan seperti pertambangan batu bara tanpa mitigasi.",
+            "Kegiatan TRANSITION (Kuning) adalah kegiatan yang sedang dalam proses transisi menuju kegiatan ramah lingkungan, termasuk perusahaan batu bara yang memiliki komitmen transisi energi baru terbarukan (EBT) minimal 20%.",
+            "Untuk dikategorikan sebagai Transisi, perusahaan harus menunjukkan roadmap transisi yang jelas dengan target pengurangan emisi dan investasi EBT.",
+        ],
+        answer="Nasabah batu bara dengan 30% transisi EBT diklasifikasikan sebagai KUNING (Transisi) karena memenuhi syarat minimal 20% komitmen transisi ke energi baru terbarukan sesuai POJK 6/2022.",
+        ground_truth="Kuning (Transisi)",
+        metadata={"id": "ESG_STRAT_001", "category": "POJK 6/2022", "reference": "POJK 6/2022 ESG Taxonomy"}
+    ),
+    RAGTestCase(
+        question="Tindakan auditor jika pendapatan non-halal portofolio mencapai 12%.",
+        contexts=[
+            "Fatwa DSN-MUI No. 80/DSN-MUI/III/2011 menetapkan bahwa pendapatan dari kegiatan yang tidak sesuai syariah (non-halal) dalam portofolio investasi syariah harus dibersihkan (cleansing).",
+            "BPKH 2023 menetapkan threshold toleransi pendapatan non-halal maksimal 10% dari total pendapatan portofolio. Jika melebihi threshold, wajib dilakukan pembersihan dana.",
+            "Proses cleansing melibatkan penyisihan pendapatan non-halal untuk disalurkan ke kegiatan sosial atau amal, dan tidak boleh dimasukkan ke dalam pendapatan bersih.",
+        ],
+        answer="Jika pendapatan non-halal mencapai 12%, auditor harus merekomendasikan pembersihan dana (cleansing) karena melebihi threshold 10% yang ditetapkan BPKH 2023 dan Fatwa DSN-MUI. Dana non-halal harus dipisahkan dan disalurkan untuk kegiatan sosial.",
+        ground_truth="Pembersihan dana (cleansing) karena melebihi threshold 10%.",
+        metadata={"id": "SHARIA_BPKH_002", "category": "Sharia Governance", "reference": "Fatwa DSN-MUI & BPKH 2023"}
+    ),
+    RAGTestCase(
+        question="Rekomendasi jika Projected CAR turun ke 7.5% akibat BI rate hike.",
+        contexts=[
+            "Peraturan OJK tentang kecukupan modal bank mewajibkan CAR minimum 8% sesuai standar Basel III. Bank dengan CAR di bawah 8% masuk kategori Danger Zone dan harus segera menyusun rencana pemulihan.",
+            "Recovery Plan wajib disusun jika proyeksi CAR turun di bawah threshold regulasi. Plan harus mencakup strategi penguatan modal, pengurangan RWA, dan timeline pemulihan.",
+            "OJK dapat memberikan sanksi pengawasan intensif hingga pencabutan izin usaha jika bank gagal memenuhi CAR minimum dalam jangka waktu yang ditentukan.",
+        ],
+        answer="Jika projected CAR turun ke 7.5% (di bawah minimum 8%), bank wajib menyusun Recovery Plan sesuai ketentuan OJK. CAR 7.5% masuk Danger Zone yang memerlukan tindakan segera berupa penguatan modal dan/atau pengurangan Risk-Weighted Assets.",
+        ground_truth="Penyusunan Recovery Plan (CAR < 8% Danger zone).",
+        metadata={"id": "FIN_CAR_003", "category": "Capital Adequacy", "reference": "OJK Capital Adequacy Regulation"}
+    ),
 ]
 
 

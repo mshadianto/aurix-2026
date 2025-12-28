@@ -1,0 +1,117 @@
+{
+  "project_name": "AURIX Excellence 2026",
+  "version": "4.2-SUPER-ENHANCED",
+  "author": "MS Hadianto",
+  "target_industry": "Indonesian Financial Services (IJK)",
+  "frameworks": ["Strategic Intelligence", "Operational Resilience", "Behavioral Audit"],
+
+  "strategic_intelligence": {
+    "dashboard_philosophy": "5-Second Rule & Executive Flight Simulator",
+    "features": [
+      {
+        "name": "So-What Auto-Narrative",
+        "description": "AI-generated insights explaining business impact for each KPI.",
+        "impact": "Reduces executive cognitive load by translating data into strategy.",
+        "status": "IMPLEMENTED",
+        "module": "ui/components/executive.py"
+      },
+      {
+        "name": "Macro-Financial Stress Tester",
+        "description": "Simulation of BI rate hikes and Rupiah fluctuations on portfolios.",
+        "logic": "Projected CAR = (Total Capital + Retained Earnings) / (Credit + Market + Operational Risk)",
+        "status": "PARTIAL",
+        "module": "ui/components/executive.py (Flight Simulator)"
+      },
+      {
+        "name": "IJK Benchmarking",
+        "description": "Real-time comparison of NPL/RBC/CAR against industry averages.",
+        "data_sources": ["OJK SLIK", "APOLO", "Market Data"],
+        "status": "PLANNED"
+      }
+    ]
+  },
+
+  "operational_resilience": {
+    "audit_logic": "Continuous Assurance & Agentic Audit",
+    "features": [
+      {
+        "name": "Automated Conformance Twin",
+        "description": "Process mining comparison between actual logs and SOP/POJK rules.",
+        "module": "modules/process_mining.py",
+        "status": "IMPLEMENTED"
+      },
+      {
+        "name": "Agentic Anti-Fraud Engine",
+        "description": "Autonomous pattern recognition for AML/APU-PPT detection.",
+        "logic_standard": "Benford's Law & LLM-based Anomaly Detection",
+        "module": "modules/anti_fraud_agent.py",
+        "status": "IMPLEMENTED"
+      },
+      {
+        "name": "Universal Cross-Regulatory RAG",
+        "scope": ["POJK Banking", "POJK IKNB", "POJK Pasar Modal", "BPKH 2023", "Basel IV", "IFRS 17"],
+        "module": "modules/regulatory_rag.py",
+        "status": "IMPLEMENTED"
+      }
+    ]
+  },
+
+  "behavioral_audit": {
+    "philosophy": "Atomic Risk Culture",
+    "features": [
+      {
+        "name": "Risk Habit Scorecard",
+        "metric": "Consistency in finding closures and risk reporting.",
+        "concept": "Small habits (Atomic Habits) leading to robust risk culture.",
+        "status": "PLANNED"
+      },
+      {
+        "name": "Compliance Nudge Engine",
+        "delivery": "Floating AI Copilot (FAB)",
+        "trigger": "Context-aware daily micro-reminders for self-assessment.",
+        "module": "ui/components/floating_copilot.py",
+        "status": "IMPLEMENTED"
+      }
+    ]
+  },
+
+  "success_criteria": {
+    "rag_accuracy": {
+      "faithfulness": ">= 0.85",
+      "relevance": ">= 0.90",
+      "hallucination_rate": "< 0.01"
+    },
+    "performance": {
+      "mean_latency_ms": "< 3000",
+      "citation_accuracy": "100%"
+    },
+    "user_experience": {
+      "so_what_quality": ">= 4.0/5.0 (Auditor Blind Review)",
+      "data_transparency": "Data Lineage visibility on all charts"
+    }
+  },
+
+  "stress_test_suite": [
+    {
+      "id": "ESG_STRAT_001",
+      "category": "POJK 6/2022",
+      "query": "Klasifikasi nasabah batu bara dengan 30% transisi EBT.",
+      "expected_output": "Kuning (Transisi)",
+      "reference": "POJK 6/2022 ESG Taxonomy"
+    },
+    {
+      "id": "SHARIA_BPKH_002",
+      "category": "Sharia Governance",
+      "query": "Tindakan auditor jika pendapatan non-halal portofolio mencapai 12%.",
+      "expected_output": "Pembersihan dana (cleansing) karena melebihi threshold 10%.",
+      "reference": "Fatwa DSN-MUI & BPKH 2023"
+    },
+    {
+      "id": "FIN_CAR_003",
+      "category": "Capital Adequacy",
+      "query": "Rekomendasi jika Projected CAR turun ke 7.5% akibat BI rate hike.",
+      "expected_output": "Penyusunan Recovery Plan (CAR < 8% Danger zone).",
+      "reference": "OJK Capital Adequacy Regulation"
+    }
+  ]
+}
