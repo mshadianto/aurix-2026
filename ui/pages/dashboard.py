@@ -67,13 +67,22 @@ def render():
 
 
 def _render_welcome_banner(t: dict):
-    """Render welcome banner."""
+    """Render welcome banner with premium Royal Purple & Gold styling."""
+    gold = t.get('gold', t['accent'])
+
     st.markdown(f'''
-    <div class="pro-card" style="background: linear-gradient(135deg, {t['primary']} 0%, {t['accent']} 100%); border: none; margin-bottom: 2rem;">
-        <div style="color: white; text-align: center; padding: 1rem 0;">
-            <h1 style="margin: 0; font-size: 2rem; color: white !important;">🛡️ Welcome to AURIX</h1>
-            <p style="margin: 0.5rem 0 0 0; font-size: 1rem; opacity: 0.95; color: white !important;">
-                Intelligent Audit. Elevated Assurance. | v4.0 Enterprise
+    <div class="premium-header" style="position:relative;overflow:hidden;">
+        <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg, {t['primary']}dd 0%, {t['primary_hover']}ee 40%, {gold}cc 100%);"></div>
+        <div style="position:absolute;top:-50%;right:-10%;width:300px;height:300px;background:radial-gradient(circle, {gold}30 0%, transparent 70%);border-radius:50%;"></div>
+        <div style="position:absolute;bottom:-30%;left:-5%;width:200px;height:200px;background:radial-gradient(circle, {t['primary']}40 0%, transparent 70%);border-radius:50%;"></div>
+        <div style="position:relative;color:white;text-align:center;padding:1.5rem 0;">
+            <div style="display:inline-block;background:{gold};color:#1a1028;font-size:0.7rem;font-weight:700;padding:0.3rem 1rem;border-radius:20px;margin-bottom:1rem;text-transform:uppercase;letter-spacing:0.1em;">Premium Edition</div>
+            <h1 style="margin:0;font-size:2.25rem;color:white !important;font-weight:700;text-shadow:0 2px 4px rgba(0,0,0,0.2);">Welcome to AURIX</h1>
+            <p style="margin:0.75rem 0 0 0;font-size:1.1rem;opacity:0.95;color:white !important;">
+                Intelligent Audit. Elevated Assurance.
+            </p>
+            <p style="margin:0.5rem 0 0 0;font-size:0.85rem;color:{gold} !important;font-weight:600;">
+                v4.2 Excellence 2026
             </p>
         </div>
     </div>
@@ -105,23 +114,24 @@ def _render_quick_stats(t: dict):
 
 
 def _render_quick_actions(t: dict):
-    """Render quick action buttons."""
+    """Render quick action buttons with premium styling."""
+    gold = t.get('gold', t['accent'])
     cols = st.columns(4)
-    
+
     actions = [
-        ("📝", "Findings", f"{len([f for f in st.session_state.get('findings', []) if f.get('status') == 'Open'])} open"),
-        ("📊", "Analytics", "6 tools ready"),
-        ("📈", "KRI Monitor", "24 indicators"),
-        ("🚨", "Fraud Scan", "60+ red flags"),
+        ("📝", "Findings", f"{len([f for f in st.session_state.get('findings', []) if f.get('status') == 'Open'])} open", t['danger']),
+        ("📊", "Analytics", "6 tools ready", t['primary']),
+        ("📈", "KRI Monitor", "24 indicators", t['warning']),
+        ("🚨", "Fraud Scan", "60+ red flags", gold),
     ]
-    
-    for col, (icon, title, subtitle) in zip(cols, actions):
+
+    for col, (icon, title, subtitle, color) in zip(cols, actions):
         with col:
             st.markdown(f'''
-            <div style="background:{t['card']}; border:1px solid {t['border']}; border-radius:8px; padding:1rem; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-                <div style="font-size:2rem; margin-bottom:0.5rem;">{icon}</div>
-                <div style="font-weight:600; color:{t['text']}; margin-bottom:0.25rem;">{title}</div>
-                <div style="font-size:0.75rem; color:{t['text_muted']};">{subtitle}</div>
+            <div class="metric-card" style="text-align:center;cursor:pointer;">
+                <div style="font-size:2.25rem;margin-bottom:0.5rem;filter:drop-shadow(0 2px 4px {color}40);">{icon}</div>
+                <div style="font-weight:700;color:{t['text']};margin-bottom:0.25rem;">{title}</div>
+                <div style="font-size:0.75rem;color:{color};font-weight:500;">{subtitle}</div>
             </div>
             ''', unsafe_allow_html=True)
 

@@ -13,36 +13,51 @@ from ui.components.badges import render_badge
 
 
 def get_logo_svg() -> str:
-    """Generate AURIX logo SVG."""
+    """Generate AURIX logo SVG with Royal Purple & Gold theme."""
     t = get_current_theme()
-    fill = t['primary']
-    
-    return f'''<svg width="32" height="32" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-<path d="M50 8 L90 25 L90 55 C90 78 70 92 50 98 C30 92 10 78 10 55 L10 25 Z" fill="{fill}" opacity="0.9"/>
-<circle cx="50" cy="48" r="8" fill="white" opacity="0.9"/>
-<circle cx="35" cy="33" r="4" fill="white" opacity="0.7"/>
-<circle cx="65" cy="33" r="4" fill="white" opacity="0.7"/>
-<circle cx="30" cy="55" r="4" fill="white" opacity="0.7"/>
-<circle cx="70" cy="55" r="4" fill="white" opacity="0.7"/>
-<circle cx="50" cy="72" r="4" fill="white" opacity="0.7"/>
-<line x1="50" y1="48" x2="35" y2="33" stroke="white" stroke-width="2" opacity="0.5"/>
-<line x1="50" y1="48" x2="65" y2="33" stroke="white" stroke-width="2" opacity="0.5"/>
+    primary = t['primary']
+    gold = t.get('gold', t['accent'])
+
+    return f'''<svg width="36" height="36" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+<defs>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:{primary};stop-opacity:1" />
+        <stop offset="100%" style="stop-color:{gold};stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+        <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+        <feMerge>
+            <feMergeNode in="coloredBlur"/>
+            <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+    </filter>
+</defs>
+<path d="M50 8 L90 25 L90 55 C90 78 70 92 50 98 C30 92 10 78 10 55 L10 25 Z" fill="url(#shieldGrad)" filter="url(#glow)"/>
+<circle cx="50" cy="48" r="8" fill="{gold}" opacity="0.95"/>
+<circle cx="35" cy="33" r="4" fill="white" opacity="0.85"/>
+<circle cx="65" cy="33" r="4" fill="white" opacity="0.85"/>
+<circle cx="30" cy="55" r="4" fill="white" opacity="0.85"/>
+<circle cx="70" cy="55" r="4" fill="white" opacity="0.85"/>
+<circle cx="50" cy="72" r="4" fill="{gold}" opacity="0.9"/>
+<line x1="50" y1="48" x2="35" y2="33" stroke="{gold}" stroke-width="2" opacity="0.6"/>
+<line x1="50" y1="48" x2="65" y2="33" stroke="{gold}" stroke-width="2" opacity="0.6"/>
 <line x1="50" y1="48" x2="30" y2="55" stroke="white" stroke-width="2" opacity="0.5"/>
 <line x1="50" y1="48" x2="70" y2="55" stroke="white" stroke-width="2" opacity="0.5"/>
-<line x1="50" y1="48" x2="50" y2="72" stroke="white" stroke-width="2" opacity="0.5"/>
+<line x1="50" y1="48" x2="50" y2="72" stroke="{gold}" stroke-width="2" opacity="0.7"/>
 </svg>'''
 
 
 def render_logo():
-    """Render AURIX logo with branding."""
+    """Render AURIX logo with premium branding."""
     t = get_current_theme()
-    
+    gold = t.get('gold', t['accent'])
+
     st.markdown(f'''
-    <div class="logo-container">
+    <div class="logo-container" style="background:linear-gradient(135deg, {t['card']} 0%, {t['bg_secondary']} 100%);border-bottom:1px solid {gold}30;">
         {get_logo_svg()}
         <div>
-            <div class="logo-text">AURIX</div>
-            <div class="logo-tagline">v4.2 Excellence 2026</div>
+            <div class="logo-text" style="background:linear-gradient(135deg, {t['text']} 0%, {gold} 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">AURIX</div>
+            <div class="logo-tagline" style="color:{gold} !important;">v4.2 Excellence 2026</div>
         </div>
     </div>
     ''', unsafe_allow_html=True)
@@ -180,26 +195,27 @@ def render_grouped_navigation(routes: List[str], categories: Dict[str, List[str]
 
 
 def render_session_stats():
-    """Render session statistics."""
+    """Render session statistics with premium styling."""
     t = get_current_theme()
-    
+    gold = t.get('gold', t['accent'])
+
     doc_count = len(st.session_state.get('documents', []))
     finding_count = len(st.session_state.get('findings', []))
-    
+
     st.markdown(f'''
-    <div class="pro-card" style="padding:1rem;">
-        <div style="font-size:0.7rem;color:{t['text_muted']};text-transform:uppercase;letter-spacing:1px;margin-bottom:0.5rem;">Quick Stats</div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:0.5rem;">
+    <div class="pro-card pro-card-gold" style="padding:1rem;">
+        <div style="font-size:0.7rem;color:{gold};text-transform:uppercase;letter-spacing:1px;margin-bottom:0.75rem;font-weight:600;">Quick Stats</div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:0.5rem;padding:0.25rem 0;">
             <span style="color:{t['text_muted']} !important;font-size:0.8rem;">Documents</span>
-            <span style="color:{t['text']} !important;font-weight:600;">{doc_count}</span>
+            <span style="color:{t['text']} !important;font-weight:700;">{doc_count}</span>
         </div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:0.5rem;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:0.5rem;padding:0.25rem 0;">
             <span style="color:{t['text_muted']} !important;font-size:0.8rem;">Findings</span>
-            <span style="color:{t['danger']} !important;font-weight:600;">{finding_count}</span>
+            <span style="color:{t['danger']} !important;font-weight:700;">{finding_count}</span>
         </div>
-        <div style="display:flex;justify-content:space-between;">
+        <div style="display:flex;justify-content:space-between;padding:0.25rem 0;">
             <span style="color:{t['text_muted']} !important;font-size:0.8rem;">KRI Alerts</span>
-            <span style="color:{t['warning']} !important;font-weight:600;">3</span>
+            <span style="color:{t['warning']} !important;font-weight:700;">3</span>
         </div>
     </div>
     ''', unsafe_allow_html=True)
@@ -243,6 +259,8 @@ def render_sidebar(routes: List[str], categories: Dict[str, List[str]]) -> str:
     """
     Render complete sidebar with grouped navigation.
     """
+    t = get_current_theme()
+
     with st.sidebar:
         render_logo()
         render_theme_toggle()
@@ -259,12 +277,13 @@ def render_sidebar(routes: List[str], categories: Dict[str, List[str]]) -> str:
         
         render_llm_config()
         
-        st.markdown('''
-        <div style="margin-top:1rem;padding:0.75rem;background:rgba(30,58,95,0.1);border-radius:8px;text-align:center;">
-            <span style="font-size:0.75rem;color:#6C757D;">
-                💡 Press <strong>🤖</strong> button for AI Copilot
+        gold = t.get('gold', t['accent'])
+        st.markdown(f'''
+        <div style="margin-top:1rem;padding:0.75rem;background:linear-gradient(135deg, {t['primary']}15, {gold}10);border:1px solid {t['primary']}20;border-radius:10px;text-align:center;">
+            <span style="font-size:0.75rem;color:{t['text_muted']};">
+                💡 Press <strong style="color:{gold};">🤖</strong> button for AI Copilot
             </span>
         </div>
         ''', unsafe_allow_html=True)
-    
+
     return selected_page

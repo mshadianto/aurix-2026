@@ -31,42 +31,64 @@ TOTAL_MODULES = 26
 
 
 # ============================================
-# Theme Colors
+# Theme Colors - Royal Purple & Gold (Premium)
 # ============================================
 COLORS = {
     "dark": {
-        "bg": "#0a0f1a",
-        "bg_secondary": "#111827",
-        "card": "#1a2234",
-        "card_hover": "#1f2937",
-        "border": "#2d3748",
-        "text": "#f8fafc",
-        "text_secondary": "#94a3b8",
-        "text_muted": "#64748b",
-        "primary": "#3b82f6",
-        "primary_hover": "#2563eb",
-        "accent": "#06b6d4",
-        "success": "#10b981",
+        # Backgrounds - Deep Royal Purple
+        "bg": "#0d0a1a",
+        "bg_secondary": "#1a1428",
+        "card": "#231c35",
+        "card_hover": "#2d2442",
+        "border": "#3d3254",
+        # Text - Warm whites
+        "text": "#f8f6ff",
+        "text_secondary": "#b8a8d4",
+        "text_muted": "#7a6a96",
+        # Primary - Royal Purple
+        "primary": "#8b5cf6",
+        "primary_hover": "#7c3aed",
+        # Accent - Rich Gold
+        "accent": "#f5b642",
+        "accent_hover": "#d4a036",
+        # Semantic Colors
+        "success": "#22c55e",
         "warning": "#f59e0b",
         "danger": "#ef4444",
-        "sidebar_bg": "#0f172a",
+        # Special - Premium accents
+        "gold": "#f5b642",
+        "gold_light": "#fcd779",
+        "platinum": "#e8e4f0",
+        # Sidebar
+        "sidebar_bg": "#0f0b1a",
     },
     "light": {
-        "bg": "#f8fafc",
+        # Backgrounds - Soft purple-white
+        "bg": "#faf8ff",
         "bg_secondary": "#ffffff",
         "card": "#ffffff",
-        "card_hover": "#f1f5f9",
-        "border": "#e2e8f0",
-        "text": "#1e293b",
-        "text_secondary": "#334155",
-        "text_muted": "#64748b",
-        "primary": "#2563eb",
-        "primary_hover": "#1d4ed8",
-        "accent": "#0891b2",
-        "success": "#059669",
+        "card_hover": "#f5f3fa",
+        "border": "#e8e0f5",
+        # Text
+        "text": "#1a1028",
+        "text_secondary": "#4a3a6a",
+        "text_muted": "#7a6a96",
+        # Primary - Royal Purple
+        "primary": "#7c3aed",
+        "primary_hover": "#6d28d9",
+        # Accent - Rich Gold
+        "accent": "#d4a036",
+        "accent_hover": "#b8922e",
+        # Semantic Colors
+        "success": "#16a34a",
         "warning": "#d97706",
         "danger": "#dc2626",
-        "sidebar_bg": "#ffffff",
+        # Special - Premium accents
+        "gold": "#d4a036",
+        "gold_light": "#e8b84a",
+        "platinum": "#6b5b8a",
+        # Sidebar
+        "sidebar_bg": "#f5f3fa",
     }
 }
 

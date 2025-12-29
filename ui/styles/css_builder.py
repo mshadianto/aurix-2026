@@ -1,6 +1,7 @@
 """
 CSS Builder for AURIX.
 Generates dynamic CSS based on current theme.
+Royal Purple & Gold Premium Theme.
 """
 
 import streamlit as st
@@ -18,10 +19,42 @@ def inject_css():
     """Inject complete CSS styles into the page."""
     t = get_current_theme()
     is_dark = st.session_state.get('theme', 'dark') == 'dark'
-    
+
+    # Get gold color with fallback
+    gold = t.get('gold', t['accent'])
+    gold_light = t.get('gold_light', t['accent'])
+
     css = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* ===== PREMIUM ANIMATIONS ===== */
+@keyframes gold-shimmer {{
+    0% {{ background-position: -200% center; }}
+    100% {{ background-position: 200% center; }}
+}}
+
+@keyframes pulse-gold {{
+    0% {{ box-shadow: 0 0 0 0 rgba(245, 182, 66, 0.4); }}
+    70% {{ box-shadow: 0 0 0 10px rgba(245, 182, 66, 0); }}
+    100% {{ box-shadow: 0 0 0 0 rgba(245, 182, 66, 0); }}
+}}
+
+@keyframes gradient-shift {{
+    0% {{ background-position: 0% 50%; }}
+    50% {{ background-position: 100% 50%; }}
+    100% {{ background-position: 0% 50%; }}
+}}
+
+.gold-shimmer {{
+    background: linear-gradient(90deg, transparent 0%, {gold}40 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: gold-shimmer 3s ease-in-out infinite;
+}}
+
+.pulse-gold {{
+    animation: pulse-gold 2s infinite;
+}}
 
 /* ===== GLOBAL ===== */
 * {{
@@ -85,19 +118,33 @@ a:hover {{
     color: {t['primary_hover']} !important;
 }}
 
-/* ===== CARDS ===== */
+/* ===== CARDS - Premium Glass-morphism ===== */
 .pro-card {{
-    background: {t['card']};
-    border: 1px solid {t['border']};
-    border-radius: 12px;
+    background: {'rgba(35, 28, 53, 0.85)' if is_dark else 'rgba(255, 255, 255, 0.95)'};
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid {'rgba(139, 92, 246, 0.15)' if is_dark else 'rgba(124, 58, 237, 0.1)'};
+    border-radius: 16px;
     padding: 1.5rem;
     margin-bottom: 1rem;
-    transition: all 0.2s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 24px {'rgba(13, 10, 26, 0.4)' if is_dark else 'rgba(0,0,0,0.06)'};
 }}
 
 .pro-card:hover {{
-    border-color: {t['primary']};
-    box-shadow: 0 4px 12px {'rgba(0,0,0,0.3)' if is_dark else 'rgba(0,0,0,0.08)'};
+    border-color: {gold};
+    box-shadow: 0 0 20px {'rgba(245, 182, 66, 0.15)' if is_dark else 'rgba(212, 160, 54, 0.1)'},
+                0 8px 32px {'rgba(139, 92, 246, 0.2)' if is_dark else 'rgba(124, 58, 237, 0.1)'};
+    transform: translateY(-2px);
+}}
+
+/* Premium Gold Border Accent */
+.pro-card-gold {{
+    border-top: 2px solid {gold};
+}}
+
+.pro-card-gold:hover {{
+    border-top-color: {gold_light};
 }}
 
 .pro-card-header {{
@@ -129,11 +176,36 @@ a:hover {{
 }}
 
 .metric-card {{
-    background: {t['card']};
-    border: 1px solid {t['border']};
-    border-radius: 12px;
+    background: {'rgba(35, 28, 53, 0.8)' if is_dark else 'rgba(255, 255, 255, 0.95)'};
+    backdrop-filter: blur(8px);
+    border: 1px solid {'rgba(139, 92, 246, 0.12)' if is_dark else 'rgba(124, 58, 237, 0.08)'};
+    border-radius: 16px;
     padding: 1.25rem;
     text-align: left;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}}
+
+.metric-card::before {{
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, {t['primary']}, {gold});
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}}
+
+.metric-card:hover::before {{
+    opacity: 1;
+}}
+
+.metric-card:hover {{
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px {'rgba(139, 92, 246, 0.15)' if is_dark else 'rgba(124, 58, 237, 0.08)'};
 }}
 
 .metric-label {{
@@ -198,34 +270,48 @@ a:hover {{
     color: {t['success']} !important;
 }}
 
-/* ===== BUTTONS ===== */
+/* ===== BUTTONS - Premium Styling ===== */
 .stButton > button {{
-    background: {t['primary']} !important;
+    background: linear-gradient(135deg, {t['primary']} 0%, {t['primary_hover']} 100%) !important;
     color: white !important;
     border: none !important;
-    border-radius: 8px !important;
-    padding: 0.625rem 1.25rem !important;
-    font-weight: 500 !important;
+    border-radius: 10px !important;
+    padding: 0.75rem 1.5rem !important;
+    font-weight: 600 !important;
     font-size: 0.875rem !important;
-    transition: all 0.2s ease !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    box-shadow: 0 4px 12px {'rgba(139, 92, 246, 0.3)' if is_dark else 'rgba(124, 58, 237, 0.2)'} !important;
 }}
 
 .stButton > button:hover {{
-    background: {t['primary_hover']} !important;
-    box-shadow: 0 4px 12px {'rgba(59,130,246,0.4)' if is_dark else 'rgba(37,99,235,0.3)'} !important;
+    background: linear-gradient(135deg, {t['primary_hover']} 0%, {t['primary']} 100%) !important;
+    box-shadow: 0 6px 20px {'rgba(139, 92, 246, 0.4)' if is_dark else 'rgba(124, 58, 237, 0.3)'},
+                0 0 30px {'rgba(245, 182, 66, 0.15)' if is_dark else 'rgba(212, 160, 54, 0.1)'} !important;
+    transform: translateY(-1px) !important;
 }}
 
-/* ===== INPUTS ===== */
+/* Gold Accent Button */
+.stButton > button[kind="primary"] {{
+    background: linear-gradient(135deg, {t['primary']} 0%, {gold} 100%) !important;
+}}
+
+.stButton > button[kind="primary"]:hover {{
+    background: linear-gradient(135deg, {gold} 0%, {t['primary']} 100%) !important;
+}}
+
+/* ===== INPUTS - Premium ===== */
 .stTextInput input, .stTextArea textarea, .stSelectbox > div > div {{
-    background: {t['bg_secondary']} !important;
-    border: 1px solid {t['border']} !important;
-    border-radius: 8px !important;
+    background: {'rgba(26, 20, 40, 0.6)' if is_dark else 'rgba(255, 255, 255, 0.95)'} !important;
+    border: 1px solid {'rgba(139, 92, 246, 0.2)' if is_dark else 'rgba(124, 58, 237, 0.15)'} !important;
+    border-radius: 10px !important;
     color: {t['text']} !important;
+    transition: all 0.3s ease !important;
 }}
 
 .stTextInput input:focus, .stTextArea textarea:focus {{
-    border-color: {t['primary']} !important;
-    box-shadow: 0 0 0 2px {'rgba(59,130,246,0.2)' if is_dark else 'rgba(37,99,235,0.15)'} !important;
+    border-color: {gold} !important;
+    box-shadow: 0 0 0 3px {'rgba(245, 182, 66, 0.15)' if is_dark else 'rgba(212, 160, 54, 0.1)'},
+                0 4px 12px {'rgba(139, 92, 246, 0.15)' if is_dark else 'rgba(124, 58, 237, 0.08)'} !important;
 }}
 
 /* ===== TABLES ===== */
@@ -472,23 +558,128 @@ a:hover {{
     color: {t['text']} !important;
 }}
 
-/* ===== SCROLLBAR ===== */
+/* ===== SCROLLBAR - Premium ===== */
 ::-webkit-scrollbar {{
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
 }}
 
 ::-webkit-scrollbar-track {{
     background: {t['bg']};
+    border-radius: 4px;
 }}
 
 ::-webkit-scrollbar-thumb {{
-    background: {t['border']};
-    border-radius: 3px;
+    background: linear-gradient(180deg, {t['primary']}60, {t['border']});
+    border-radius: 4px;
 }}
 
 ::-webkit-scrollbar-thumb:hover {{
-    background: {t['text_muted']};
+    background: linear-gradient(180deg, {gold}80, {t['primary']}60);
+}}
+
+/* ===== PREMIUM GRADIENT HEADERS ===== */
+.premium-header {{
+    background: linear-gradient(135deg, {t['primary']} 0%, {t['primary_hover']} 50%, {gold} 100%);
+    background-size: 200% 200%;
+    animation: gradient-shift 8s ease infinite;
+    color: white !important;
+    padding: 2rem;
+    border-radius: 16px;
+    margin-bottom: 2rem;
+    box-shadow: 0 8px 32px {'rgba(139, 92, 246, 0.3)' if is_dark else 'rgba(124, 58, 237, 0.2)'};
+}}
+
+.premium-header h1, .premium-header h2, .premium-header h3,
+.premium-header p, .premium-header span {{
+    color: white !important;
+}}
+
+/* ===== GOLD ACCENTS ===== */
+.gold-text {{
+    color: {gold} !important;
+    font-weight: 600;
+}}
+
+.gold-border {{
+    border: 2px solid {gold} !important;
+}}
+
+.gold-glow {{
+    box-shadow: 0 0 20px {'rgba(245, 182, 66, 0.3)' if is_dark else 'rgba(212, 160, 54, 0.2)'};
+}}
+
+/* ===== PREMIUM BADGES ===== */
+.badge-premium {{
+    background: linear-gradient(135deg, {gold} 0%, {gold_light} 100%);
+    color: #1a1028 !important;
+    font-weight: 700;
+    padding: 0.3rem 0.8rem;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    box-shadow: 0 2px 8px rgba(245, 182, 66, 0.3);
+}}
+
+/* ===== TABS - Premium ===== */
+.stTabs [data-baseweb="tab-list"] {{
+    background: {'rgba(26, 20, 40, 0.5)' if is_dark else 'rgba(245, 243, 250, 0.8)'};
+    border-radius: 12px;
+    padding: 0.25rem;
+    gap: 0.25rem;
+}}
+
+.stTabs [data-baseweb="tab"] {{
+    background: transparent !important;
+    border-radius: 10px;
+    color: {t['text_secondary']} !important;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}}
+
+.stTabs [aria-selected="true"] {{
+    background: linear-gradient(135deg, {t['primary']} 0%, {t['primary_hover']} 100%) !important;
+    color: white !important;
+    box-shadow: 0 2px 8px {'rgba(139, 92, 246, 0.3)' if is_dark else 'rgba(124, 58, 237, 0.2)'};
+}}
+
+/* ===== EXPANDERS - Premium ===== */
+.streamlit-expanderHeader {{
+    background: {'rgba(35, 28, 53, 0.6)' if is_dark else 'rgba(255, 255, 255, 0.9)'} !important;
+    border: 1px solid {'rgba(139, 92, 246, 0.15)' if is_dark else 'rgba(124, 58, 237, 0.1)'} !important;
+    border-radius: 12px !important;
+}}
+
+/* ===== DIVIDERS - Premium ===== */
+hr {{
+    border: none;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, {t['border']}, {gold}30, {t['border']}, transparent);
+    margin: 2rem 0;
+}}
+
+/* ===== SELECT BOXES - Premium ===== */
+.stSelectbox [data-baseweb="select"] {{
+    background: {'rgba(26, 20, 40, 0.6)' if is_dark else 'rgba(255, 255, 255, 0.95)'} !important;
+    border-radius: 10px !important;
+}}
+
+/* ===== SLIDERS - Premium ===== */
+.stSlider [data-baseweb="slider"] {{
+    background: transparent !important;
+}}
+
+.stSlider [role="slider"] {{
+    background: {gold} !important;
+    border: 2px solid {t['primary']} !important;
+}}
+
+/* ===== MULTISELECT - Premium ===== */
+.stMultiSelect [data-baseweb="tag"] {{
+    background: linear-gradient(135deg, {t['primary']}40, {gold}20) !important;
+    border: 1px solid {t['primary']}60 !important;
+    border-radius: 8px !important;
 }}
 </style>
 """
