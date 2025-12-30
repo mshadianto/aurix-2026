@@ -1,5 +1,8 @@
 # Abaikan credentials/rahasia
 .streamlit/secrets.toml
+.env
+.env.local
+.env.*.local
 
 # Abaikan folder environment & sampah python
 venv/

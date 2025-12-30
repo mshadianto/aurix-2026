@@ -42,6 +42,8 @@ from ui.pages import (
 )
 # 2026 Excellence modules
 from ui.pages import process_mining, regulatory_rag, executive_dashboard
+# 2026 World-Class modules
+from ui.pages import stress_tester, ijk_benchmarking, admin_panel
 
 
 class Router:
@@ -76,6 +78,9 @@ class Router:
             # 2026 Intelligence
             "🔄 Process Mining": process_mining.render,
             "📜 Regulatory RAG": regulatory_rag.render,
+            # 2026 World-Class Risk Intelligence
+            "🎰 Stress Tester": stress_tester.render,
+            "📊 IJK Benchmarking": ijk_benchmarking.render,
             # Intelligence
             "🤖 AI Chat": chat.render,
             "🧪 AI Lab": ai_lab.render,
@@ -89,6 +94,8 @@ class Router:
             "⚙️ Settings": settings.render,
             "❓ Help": help.render,
             "ℹ️ About": about.render,
+            # Admin (System Admin only)
+            "🔧 Admin Panel": admin_panel.render,
         }
         
         self.page_categories = {
@@ -116,6 +123,10 @@ class Router:
                 "🔍 Fraud Detection",
                 "🔄 Process Mining",
                 "📜 Regulatory RAG",
+            ],
+            "Risk Intelligence": [
+                "🎰 Stress Tester",
+                "📊 IJK Benchmarking",
             ],
             "Intelligence": [
                 "🤖 AI Chat",

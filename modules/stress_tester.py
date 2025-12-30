@@ -792,6 +792,625 @@ def generate_sample_portfolio() -> PortfolioPosition:
     )
 
 
+# ============================================
+# Monte Carlo Simulation Models
+# ============================================
+
+class MonteCarloConfig(BaseModel):
+    """Configuration for Monte Carlo simulation."""
+    num_simulations: int = Field(default=1000, ge=100, le=10000, description="Number of simulations")
+    confidence_levels: List[float] = Field(default=[0.95, 0.99], description="Confidence levels for VaR/CVaR")
+    seed: Optional[int] = Field(default=None, description="Random seed for reproducibility")
+
+    # Macro variable distributions (mean, std_dev)
+    bi_rate_dist: Tuple[float, float] = Field(default=(0, 100), description="BI rate change distribution (bps)")
+    usdidr_dist: Tuple[float, float] = Field(default=(0, 10), description="USD/IDR change distribution (%)")
+    gdp_dist: Tuple[float, float] = Field(default=(0, 2), description="GDP growth change distribution (%)")
+    inflation_dist: Tuple[float, float] = Field(default=(0, 1.5), description="Inflation change distribution (%)")
+
+    # Correlation matrix for macro variables
+    correlation_matrix: Optional[List[List[float]]] = Field(
+        default=None,
+        description="4x4 correlation matrix [bi_rate, usdidr, gdp, inflation]"
+    )
+
+
+class MonteCarloResult(BaseModel):
+    """Result of Monte Carlo simulation."""
+    simulation_id: str = Field(..., description="Simulation identifier")
+    config: MonteCarloConfig = Field(..., description="Simulation configuration")
+    num_simulations: int = Field(..., description="Number of simulations run")
+
+    # CAR distribution
+    car_mean: float = Field(..., description="Mean projected CAR")
+    car_std: float = Field(..., description="Standard deviation of CAR")
+    car_min: float = Field(..., description="Minimum CAR observed")
+    car_max: float = Field(..., description="Maximum CAR observed")
+    car_percentiles: Dict[str, float] = Field(default_factory=dict, description="CAR percentiles")
+
+    # VaR/CVaR metrics
+    var_95: float = Field(..., description="Value at Risk at 95% confidence")
+    var_99: float = Field(..., description="Value at Risk at 99% confidence")
+    cvar_95: float = Field(..., description="Conditional VaR (Expected Shortfall) at 95%")
+    cvar_99: float = Field(..., description="Conditional VaR (Expected Shortfall) at 99%")
+
+    # NPL distribution
+    npl_mean: float = Field(..., description="Mean projected NPL ratio")
+    npl_std: float = Field(..., description="Standard deviation of NPL")
+    npl_percentiles: Dict[str, float] = Field(default_factory=dict, description="NPL percentiles")
+
+    # Breach probabilities
+    prob_car_below_8: float = Field(..., description="Probability CAR falls below 8%")
+    prob_car_below_10: float = Field(..., description="Probability CAR falls below 10%")
+    prob_car_below_12: float = Field(..., description="Probability CAR falls below 12%")
+    prob_npl_above_5: float = Field(..., description="Probability NPL exceeds 5%")
+
+    # Simulation data (for visualization)
+    car_distribution: List[float] = Field(default_factory=list, description="All simulated CAR values")
+    npl_distribution: List[float] = Field(default_factory=list, description="All simulated NPL values")
+
+    # Risk assessment
+    risk_rating: str = Field(..., description="Overall risk rating based on simulations")
+    narrative: str = Field(..., description="AI-generated analysis narrative")
+
+    timestamp: datetime = Field(default_factory=datetime.now)
+
+
+class ReverseStressResult(BaseModel):
+    """Result of reverse stress testing."""
+    test_id: str = Field(..., description="Test identifier")
+    target_car: float = Field(..., description="Target CAR threshold")
+
+    # Breaking point scenarios
+    breaking_scenarios: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Scenarios that cause CAR to breach target"
+    )
+
+    # Most likely breaking path
+    most_likely_scenario: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Most probable scenario causing breach"
+    )
+
+    # Vulnerability analysis
+    key_vulnerabilities: List[str] = Field(default_factory=list, description="Key risk factors")
+    sensitivity_ranking: Dict[str, float] = Field(
+        default_factory=dict,
+        description="Risk factor sensitivity ranking"
+    )
+
+    # Minimum shock required
+    min_bi_rate_shock: Optional[int] = Field(None, description="Minimum BI rate shock (bps) to breach")
+    min_usdidr_shock: Optional[float] = Field(None, description="Minimum USD/IDR shock (%) to breach")
+    min_credit_loss: Optional[float] = Field(None, description="Minimum credit loss (%) to breach")
+
+    # Recommendations
+    recommendations: List[str] = Field(default_factory=list, description="Mitigation recommendations")
+    narrative: str = Field(..., description="Analysis narrative")
+
+    timestamp: datetime = Field(default_factory=datetime.now)
+
+
+# ============================================
+# Monte Carlo Simulator
+# ============================================
+
+class MonteCarloSimulator:
+    """
+    Monte Carlo Simulation Engine for Stress Testing.
+    Runs thousands of scenarios with randomized macro variables.
+    """
+
+    def __init__(self, stress_tester: Optional['MacroStressTester'] = None):
+        """Initialize simulator with a stress tester instance."""
+        self.stress_tester = stress_tester or MacroStressTester()
+        self._sim_counter = 0
+
+    def _generate_sim_id(self) -> str:
+        """Generate unique simulation ID."""
+        self._sim_counter += 1
+        return f"MC-{datetime.now().strftime('%Y%m%d%H%M%S')}-{self._sim_counter:04d}"
+
+    def _generate_correlated_samples(
+        self,
+        config: MonteCarloConfig,
+        n_samples: int
+    ) -> Tuple[List[float], List[float], List[float], List[float]]:
+        """Generate correlated random samples for macro variables."""
+        import numpy as np
+
+        if config.seed is not None:
+            np.random.seed(config.seed)
+
+        # Default correlation matrix if not provided
+        if config.correlation_matrix is None:
+            # Typical correlations: BI rate vs USDIDR positive, GDP vs others negative
+            corr_matrix = np.array([
+                [1.0, 0.6, -0.4, 0.5],   # BI rate
+                [0.6, 1.0, -0.5, 0.4],   # USD/IDR
+                [-0.4, -0.5, 1.0, -0.3], # GDP
+                [0.5, 0.4, -0.3, 1.0]    # Inflation
+            ])
+        else:
+            corr_matrix = np.array(config.correlation_matrix)
+
+        # Cholesky decomposition for correlated samples
+        L = np.linalg.cholesky(corr_matrix)
+
+        # Generate uncorrelated standard normal samples
+        uncorrelated = np.random.standard_normal((n_samples, 4))
+
+        # Transform to correlated samples
+        correlated = uncorrelated @ L.T
+
+        # Scale to specified distributions
+        bi_rate_samples = correlated[:, 0] * config.bi_rate_dist[1] + config.bi_rate_dist[0]
+        usdidr_samples = correlated[:, 1] * config.usdidr_dist[1] + config.usdidr_dist[0]
+        gdp_samples = correlated[:, 2] * config.gdp_dist[1] + config.gdp_dist[0]
+        inflation_samples = correlated[:, 3] * config.inflation_dist[1] + config.inflation_dist[0]
+
+        return (
+            bi_rate_samples.tolist(),
+            usdidr_samples.tolist(),
+            gdp_samples.tolist(),
+            inflation_samples.tolist()
+        )
+
+    def run_simulation(
+        self,
+        position: PortfolioPosition,
+        config: Optional[MonteCarloConfig] = None
+    ) -> MonteCarloResult:
+        """
+        Run Monte Carlo simulation.
+
+        Args:
+            position: Current portfolio position
+            config: Simulation configuration (uses defaults if None)
+
+        Returns:
+            MonteCarloResult with full distribution analysis
+        """
+        import numpy as np
+
+        if config is None:
+            config = MonteCarloConfig()
+
+        # Generate correlated macro variable samples
+        bi_rates, usdidr_changes, gdp_changes, inflation_changes = \
+            self._generate_correlated_samples(config, config.num_simulations)
+
+        # Run simulations
+        car_results = []
+        npl_results = []
+        loss_results = []
+
+        for i in range(config.num_simulations):
+            # Create scenario from random sample
+            scenario = StressScenario(
+                scenario_id=f"MC-{i:05d}",
+                scenario_name=f"Monte Carlo Scenario {i+1}",
+                severity=ScenarioSeverity.MODERATE,
+                description="Monte Carlo generated scenario",
+                bi_rate_change_bps=int(bi_rates[i]),
+                usdidr_change_pct=usdidr_changes[i],
+                gdp_growth_change_pct=gdp_changes[i],
+                inflation_change_pct=inflation_changes[i],
+                credit_loss_rate=max(0, abs(gdp_changes[i]) * 0.5 + abs(usdidr_changes[i]) * 0.1),
+                npl_migration_rate=max(0, abs(bi_rates[i]) * 0.05 + abs(gdp_changes[i]) * 3),
+                market_loss_rate=max(0, abs(usdidr_changes[i]) * 0.3 + abs(bi_rates[i]) * 0.02),
+                liquidity_outflow_rate=max(0, abs(bi_rates[i]) * 0.05 + abs(usdidr_changes[i]) * 0.5)
+            )
+
+            # Run stress test
+            result = self.stress_tester.run_stress_test(position, scenario)
+
+            car_results.append(result.projections.projected_car)
+            npl_results.append(result.projections.projected_npl)
+            loss_results.append(result.total_loss)
+
+        car_array = np.array(car_results)
+        npl_array = np.array(npl_results)
+        loss_array = np.array(loss_results)
+
+        # Calculate statistics
+        car_mean = float(np.mean(car_array))
+        car_std = float(np.std(car_array))
+
+        # VaR calculations (loss perspective - lower CAR is worse)
+        var_95 = float(np.percentile(loss_array, 95))
+        var_99 = float(np.percentile(loss_array, 99))
+
+        # CVaR (Expected Shortfall)
+        cvar_95 = float(np.mean(loss_array[loss_array >= np.percentile(loss_array, 95)]))
+        cvar_99 = float(np.mean(loss_array[loss_array >= np.percentile(loss_array, 99)]))
+
+        # Breach probabilities
+        prob_car_below_8 = float(np.mean(car_array < 8))
+        prob_car_below_10 = float(np.mean(car_array < 10))
+        prob_car_below_12 = float(np.mean(car_array < 12))
+        prob_npl_above_5 = float(np.mean(npl_array > 5))
+
+        # Percentiles
+        car_percentiles = {
+            "p1": float(np.percentile(car_array, 1)),
+            "p5": float(np.percentile(car_array, 5)),
+            "p10": float(np.percentile(car_array, 10)),
+            "p25": float(np.percentile(car_array, 25)),
+            "p50": float(np.percentile(car_array, 50)),
+            "p75": float(np.percentile(car_array, 75)),
+            "p90": float(np.percentile(car_array, 90)),
+            "p95": float(np.percentile(car_array, 95)),
+            "p99": float(np.percentile(car_array, 99)),
+        }
+
+        npl_percentiles = {
+            "p1": float(np.percentile(npl_array, 1)),
+            "p5": float(np.percentile(npl_array, 5)),
+            "p50": float(np.percentile(npl_array, 50)),
+            "p95": float(np.percentile(npl_array, 95)),
+            "p99": float(np.percentile(npl_array, 99)),
+        }
+
+        # Risk rating
+        if prob_car_below_8 > 0.1:
+            risk_rating = "CRITICAL"
+        elif prob_car_below_10 > 0.2:
+            risk_rating = "HIGH"
+        elif prob_car_below_12 > 0.3:
+            risk_rating = "MODERATE"
+        else:
+            risk_rating = "LOW"
+
+        # Generate narrative
+        narrative = self._generate_mc_narrative(
+            car_mean, car_std, prob_car_below_8, prob_car_below_12,
+            var_99, risk_rating, config.num_simulations
+        )
+
+        return MonteCarloResult(
+            simulation_id=self._generate_sim_id(),
+            config=config,
+            num_simulations=config.num_simulations,
+            car_mean=round(car_mean, 2),
+            car_std=round(car_std, 2),
+            car_min=round(float(np.min(car_array)), 2),
+            car_max=round(float(np.max(car_array)), 2),
+            car_percentiles=car_percentiles,
+            var_95=round(var_95, 2),
+            var_99=round(var_99, 2),
+            cvar_95=round(cvar_95, 2),
+            cvar_99=round(cvar_99, 2),
+            npl_mean=round(float(np.mean(npl_array)), 2),
+            npl_std=round(float(np.std(npl_array)), 2),
+            npl_percentiles=npl_percentiles,
+            prob_car_below_8=round(prob_car_below_8, 4),
+            prob_car_below_10=round(prob_car_below_10, 4),
+            prob_car_below_12=round(prob_car_below_12, 4),
+            prob_npl_above_5=round(prob_npl_above_5, 4),
+            car_distribution=car_results,
+            npl_distribution=npl_results,
+            risk_rating=risk_rating,
+            narrative=narrative
+        )
+
+    def _generate_mc_narrative(
+        self,
+        car_mean: float,
+        car_std: float,
+        prob_below_8: float,
+        prob_below_12: float,
+        var_99: float,
+        risk_rating: str,
+        n_sims: int
+    ) -> str:
+        """Generate Monte Carlo analysis narrative."""
+        narrative = f"Monte Carlo simulation with {n_sims:,} scenarios completed. "
+        narrative += f"The projected CAR has a mean of {car_mean:.2f}% with standard deviation of {car_std:.2f}%. "
+
+        if prob_below_8 > 0:
+            narrative += f"There is a {prob_below_8*100:.1f}% probability that CAR falls below the regulatory minimum of 8%. "
+        else:
+            narrative += "The probability of breaching the 8% regulatory minimum is negligible. "
+
+        if prob_below_12 > 0.1:
+            narrative += f"The probability of CAR falling below 12% (internal buffer) is {prob_below_12*100:.1f}%. "
+
+        narrative += f"Value at Risk at 99% confidence is IDR {var_99:.1f}B. "
+        narrative += f"Overall risk assessment: {risk_rating}."
+
+        return narrative
+
+
+# ============================================
+# Reverse Stress Tester
+# ============================================
+
+class ReverseStressTester:
+    """
+    Reverse Stress Testing Engine.
+    Finds scenarios that would cause CAR to breach target threshold.
+    """
+
+    def __init__(self, stress_tester: Optional['MacroStressTester'] = None):
+        """Initialize with a stress tester instance."""
+        self.stress_tester = stress_tester or MacroStressTester()
+        self._test_counter = 0
+
+    def _generate_test_id(self) -> str:
+        """Generate unique test ID."""
+        self._test_counter += 1
+        return f"RST-{datetime.now().strftime('%Y%m%d')}-{self._test_counter:04d}"
+
+    def find_breaking_scenarios(
+        self,
+        position: PortfolioPosition,
+        target_car: float = 8.0,
+        max_iterations: int = 100
+    ) -> ReverseStressResult:
+        """
+        Find scenarios that cause CAR to breach target.
+
+        Args:
+            position: Current portfolio position
+            target_car: Target CAR threshold (default: regulatory minimum 8%)
+            max_iterations: Maximum iterations for search
+
+        Returns:
+            ReverseStressResult with breaking scenarios
+        """
+        breaking_scenarios = []
+        sensitivity_results = {}
+
+        baseline_car = position.current_car
+
+        # Test individual risk factors
+        risk_factors = [
+            ("bi_rate", range(50, 501, 50)),      # 50-500 bps
+            ("usdidr", range(5, 51, 5)),          # 5-50%
+            ("credit_loss", [0.5, 1, 2, 3, 5, 8, 10]),  # Credit loss rates
+            ("npl_migration", range(10, 81, 10)), # 10-80%
+        ]
+
+        for factor_name, values in risk_factors:
+            for value in values:
+                scenario = self._create_single_factor_scenario(factor_name, value)
+                result = self.stress_tester.run_stress_test(position, scenario)
+
+                if result.projections.projected_car < target_car:
+                    breaking_scenarios.append({
+                        "factor": factor_name,
+                        "value": value,
+                        "projected_car": result.projections.projected_car,
+                        "total_loss": result.total_loss,
+                        "scenario_name": scenario.scenario_name
+                    })
+
+                    # Record minimum shock required
+                    if factor_name not in sensitivity_results:
+                        sensitivity_results[factor_name] = value
+                    break
+
+        # Test combined scenarios
+        combined_breaking = self._search_combined_scenarios(
+            position, target_car, max_iterations
+        )
+        breaking_scenarios.extend(combined_breaking)
+
+        # Find most likely scenario (smallest combined shock)
+        most_likely = self._find_most_likely_scenario(breaking_scenarios)
+
+        # Sensitivity ranking
+        sensitivity_ranking = {}
+        for factor, min_value in sensitivity_results.items():
+            # Lower min_value = more sensitive
+            sensitivity_ranking[factor] = 1.0 / (min_value + 1)
+
+        # Normalize
+        total_sens = sum(sensitivity_ranking.values()) if sensitivity_ranking else 1
+        sensitivity_ranking = {k: v/total_sens for k, v in sensitivity_ranking.items()}
+
+        # Identify vulnerabilities
+        vulnerabilities = []
+        sorted_sens = sorted(sensitivity_ranking.items(), key=lambda x: -x[1])
+        for factor, sens in sorted_sens[:3]:
+            if factor == "bi_rate":
+                vulnerabilities.append("Interest rate risk - Significant exposure to BI rate increases")
+            elif factor == "usdidr":
+                vulnerabilities.append("FX risk - High sensitivity to Rupiah depreciation")
+            elif factor == "credit_loss":
+                vulnerabilities.append("Credit risk - Vulnerable to loan portfolio deterioration")
+            elif factor == "npl_migration":
+                vulnerabilities.append("Asset quality - Exposed to NPL migration")
+
+        # Generate recommendations
+        recommendations = self._generate_recommendations(
+            sensitivity_ranking, baseline_car, target_car
+        )
+
+        # Generate narrative
+        narrative = self._generate_reverse_stress_narrative(
+            baseline_car, target_car, len(breaking_scenarios),
+            most_likely, vulnerabilities
+        )
+
+        return ReverseStressResult(
+            test_id=self._generate_test_id(),
+            target_car=target_car,
+            breaking_scenarios=breaking_scenarios,
+            most_likely_scenario=most_likely,
+            key_vulnerabilities=vulnerabilities,
+            sensitivity_ranking=sensitivity_ranking,
+            min_bi_rate_shock=sensitivity_results.get("bi_rate"),
+            min_usdidr_shock=sensitivity_results.get("usdidr"),
+            min_credit_loss=sensitivity_results.get("credit_loss"),
+            recommendations=recommendations,
+            narrative=narrative
+        )
+
+    def _create_single_factor_scenario(
+        self,
+        factor: str,
+        value: float
+    ) -> StressScenario:
+        """Create scenario with single factor shock."""
+        scenario_params = {
+            "scenario_id": f"RST-{factor}-{value}",
+            "scenario_name": f"Reverse Stress - {factor} = {value}",
+            "severity": ScenarioSeverity.SEVERE,
+            "description": f"Single factor stress on {factor}",
+            "bi_rate_change_bps": 0,
+            "usdidr_change_pct": 0,
+            "credit_loss_rate": 0,
+            "npl_migration_rate": 0,
+            "market_loss_rate": 0,
+            "liquidity_outflow_rate": 0,
+        }
+
+        if factor == "bi_rate":
+            scenario_params["bi_rate_change_bps"] = int(value)
+            scenario_params["npl_migration_rate"] = value * 0.03
+        elif factor == "usdidr":
+            scenario_params["usdidr_change_pct"] = float(value)
+            scenario_params["market_loss_rate"] = value * 0.3
+        elif factor == "credit_loss":
+            scenario_params["credit_loss_rate"] = float(value)
+        elif factor == "npl_migration":
+            scenario_params["npl_migration_rate"] = float(value)
+
+        return StressScenario(**scenario_params)
+
+    def _search_combined_scenarios(
+        self,
+        position: PortfolioPosition,
+        target_car: float,
+        max_iterations: int
+    ) -> List[Dict]:
+        """Search for combined factor scenarios that break CAR."""
+        import random
+        breaking = []
+
+        for _ in range(max_iterations):
+            # Random combination of factors
+            bi_rate = random.randint(0, 300)
+            usdidr = random.uniform(0, 30)
+            credit_loss = random.uniform(0, 5)
+            npl_migration = random.uniform(0, 50)
+
+            scenario = StressScenario(
+                scenario_id=f"RST-COMBINED-{_}",
+                scenario_name=f"Combined Reverse Stress {_+1}",
+                severity=ScenarioSeverity.SEVERE,
+                description="Combined factor stress scenario",
+                bi_rate_change_bps=bi_rate,
+                usdidr_change_pct=usdidr,
+                credit_loss_rate=credit_loss,
+                npl_migration_rate=npl_migration,
+                market_loss_rate=usdidr * 0.3,
+                liquidity_outflow_rate=bi_rate * 0.05
+            )
+
+            result = self.stress_tester.run_stress_test(position, scenario)
+
+            if result.projections.projected_car < target_car:
+                breaking.append({
+                    "factor": "combined",
+                    "bi_rate": bi_rate,
+                    "usdidr": round(usdidr, 1),
+                    "credit_loss": round(credit_loss, 2),
+                    "npl_migration": round(npl_migration, 1),
+                    "projected_car": result.projections.projected_car,
+                    "total_loss": result.total_loss,
+                    "scenario_name": scenario.scenario_name
+                })
+
+        return breaking
+
+    def _find_most_likely_scenario(
+        self,
+        breaking_scenarios: List[Dict]
+    ) -> Dict:
+        """Find the most likely (smallest shock) breaking scenario."""
+        if not breaking_scenarios:
+            return {}
+
+        # Score by combined shock magnitude (lower = more likely)
+        def shock_magnitude(s: Dict) -> float:
+            if s.get("factor") == "combined":
+                return (
+                    s.get("bi_rate", 0) / 100 +
+                    s.get("usdidr", 0) / 10 +
+                    s.get("credit_loss", 0) +
+                    s.get("npl_migration", 0) / 20
+                )
+            else:
+                return s.get("value", float('inf')) / 100
+
+        return min(breaking_scenarios, key=shock_magnitude)
+
+    def _generate_recommendations(
+        self,
+        sensitivity: Dict[str, float],
+        baseline_car: float,
+        target_car: float
+    ) -> List[str]:
+        """Generate mitigation recommendations based on sensitivities."""
+        recommendations = []
+        buffer = baseline_car - target_car
+
+        if buffer < 4:
+            recommendations.append("IMMEDIATE: Increase capital buffer to at least 4% above regulatory minimum")
+
+        if sensitivity.get("bi_rate", 0) > 0.25:
+            recommendations.append("Reduce interest rate sensitivity through ALM restructuring")
+            recommendations.append("Consider interest rate hedging instruments")
+
+        if sensitivity.get("usdidr", 0) > 0.25:
+            recommendations.append("Reduce foreign currency exposure or increase hedging")
+            recommendations.append("Review FX limit framework and stress-adjusted limits")
+
+        if sensitivity.get("credit_loss", 0) > 0.25:
+            recommendations.append("Strengthen credit risk management and underwriting standards")
+            recommendations.append("Increase loan loss provisions and coverage ratio")
+
+        if sensitivity.get("npl_migration", 0) > 0.25:
+            recommendations.append("Intensify early warning monitoring for watchlist accounts")
+            recommendations.append("Accelerate NPL recovery and collection efforts")
+
+        if not recommendations:
+            recommendations.append("Maintain current risk management framework")
+            recommendations.append("Continue monitoring macro-financial conditions")
+
+        return recommendations
+
+    def _generate_reverse_stress_narrative(
+        self,
+        baseline_car: float,
+        target_car: float,
+        n_breaking: int,
+        most_likely: Dict,
+        vulnerabilities: List[str]
+    ) -> str:
+        """Generate reverse stress test narrative."""
+        narrative = f"Reverse stress testing identified {n_breaking} scenarios that would cause CAR to breach {target_car}%. "
+        narrative += f"Current CAR stands at {baseline_car:.2f}%, providing a buffer of {baseline_car - target_car:.2f}pp. "
+
+        if most_likely:
+            if most_likely.get("factor") == "combined":
+                narrative += f"The most probable breaking scenario requires a combined shock of "
+                narrative += f"BI rate +{most_likely.get('bi_rate', 0)}bps, "
+                narrative += f"USD/IDR +{most_likely.get('usdidr', 0)}%, "
+                narrative += f"and credit loss of {most_likely.get('credit_loss', 0)}%. "
+            else:
+                narrative += f"The minimum single-factor shock is {most_likely.get('factor')} = {most_likely.get('value')}. "
+
+        if vulnerabilities:
+            narrative += f"Key vulnerability identified: {vulnerabilities[0]}."
+
+        return narrative
+
+
 # Export
 __all__ = [
     # Enums
@@ -805,6 +1424,10 @@ __all__ = [
     "ProjectedMetrics",
     "StressTestResult",
     "StressTestSuite",
+    # Monte Carlo Models
+    "MonteCarloConfig",
+    "MonteCarloResult",
+    "ReverseStressResult",
     # Constants
     "STRESS_SCENARIOS",
     "REGULATORY_THRESHOLDS",
@@ -812,6 +1435,8 @@ __all__ = [
     "USDIDR_BASELINE",
     # Classes
     "MacroStressTester",
+    "MonteCarloSimulator",
+    "ReverseStressTester",
     # Functions
     "generate_sample_portfolio",
 ]

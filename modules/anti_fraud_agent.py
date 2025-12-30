@@ -847,6 +847,814 @@ def generate_sample_transactions(
     return sorted(transactions, key=lambda t: t.transaction_date)
 
 
+# ============================================
+# Graph Analysis Models
+# ============================================
+
+class NetworkNode(BaseModel):
+    """Node in transaction network graph."""
+    node_id: str = Field(..., description="Node identifier (account/customer)")
+    node_type: str = Field(..., description="Type: account, customer, entity")
+    label: str = Field(..., description="Display label")
+    total_volume: float = Field(default=0, description="Total transaction volume")
+    transaction_count: int = Field(default=0, description="Number of transactions")
+    risk_score: float = Field(default=0, ge=0, le=100, description="Node risk score")
+    community_id: Optional[int] = Field(None, description="Community cluster ID")
+    centrality_score: float = Field(default=0, description="Network centrality score")
+    is_suspicious: bool = Field(default=False, description="Flagged as suspicious")
+
+
+class NetworkEdge(BaseModel):
+    """Edge in transaction network graph."""
+    source: str = Field(..., description="Source node ID")
+    target: str = Field(..., description="Target node ID")
+    weight: float = Field(..., description="Edge weight (total amount)")
+    transaction_count: int = Field(default=1, description="Number of transactions")
+    avg_amount: float = Field(default=0, description="Average transaction amount")
+    first_transaction: Optional[datetime] = Field(None, description="First transaction date")
+    last_transaction: Optional[datetime] = Field(None, description="Last transaction date")
+    is_high_risk: bool = Field(default=False, description="High risk connection")
+
+
+class TransactionNetwork(BaseModel):
+    """Transaction network graph structure."""
+    network_id: str = Field(..., description="Network identifier")
+    nodes: List[NetworkNode] = Field(default_factory=list)
+    edges: List[NetworkEdge] = Field(default_factory=list)
+    total_nodes: int = Field(default=0)
+    total_edges: int = Field(default=0)
+    num_communities: int = Field(default=0, description="Number of detected communities")
+    network_density: float = Field(default=0, description="Network density 0-1")
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
+class NetworkAnomaly(BaseModel):
+    """Detected network anomaly."""
+    anomaly_id: str = Field(..., description="Anomaly identifier")
+    anomaly_type: str = Field(..., description="Type: hub, mule, layering, circular")
+    description: str = Field(..., description="Description of the anomaly")
+    involved_nodes: List[str] = Field(default_factory=list)
+    involved_edges: List[Tuple[str, str]] = Field(default_factory=list)
+    risk_score: float = Field(..., ge=0, le=100)
+    total_amount: float = Field(..., description="Total amount involved")
+    evidence: List[str] = Field(default_factory=list)
+    detected_at: datetime = Field(default_factory=datetime.now)
+
+
+class GraphAnalysisResult(BaseModel):
+    """Result of graph-based fraud analysis."""
+    analysis_id: str = Field(..., description="Analysis identifier")
+    network: TransactionNetwork = Field(..., description="Transaction network")
+    anomalies: List[NetworkAnomaly] = Field(default_factory=list)
+    high_risk_nodes: List[NetworkNode] = Field(default_factory=list)
+    potential_mule_accounts: List[str] = Field(default_factory=list)
+    layering_patterns: List[Dict[str, Any]] = Field(default_factory=list)
+    circular_flows: List[List[str]] = Field(default_factory=list)
+    key_findings: List[str] = Field(default_factory=list)
+    narrative: str = Field(..., description="Analysis narrative")
+    timestamp: datetime = Field(default_factory=datetime.now)
+
+
+# ============================================
+# Transaction Graph Analyzer
+# ============================================
+
+class TransactionGraphAnalyzer:
+    """
+    Graph-based transaction analysis for fraud detection.
+    Builds network graphs and detects patterns like money mules,
+    layering, and circular flows.
+    """
+
+    def __init__(self):
+        """Initialize the graph analyzer."""
+        self._analysis_counter = 0
+
+    def _generate_analysis_id(self) -> str:
+        """Generate unique analysis ID."""
+        self._analysis_counter += 1
+        return f"GRA-{datetime.now().strftime('%Y%m%d%H%M%S')}-{self._analysis_counter:04d}"
+
+    def build_transaction_network(
+        self,
+        transactions: List[TransactionRecord]
+    ) -> TransactionNetwork:
+        """
+        Build transaction network graph from transactions.
+
+        Args:
+            transactions: List of transaction records
+
+        Returns:
+            TransactionNetwork with nodes and edges
+        """
+        nodes_dict: Dict[str, NetworkNode] = {}
+        edges_dict: Dict[Tuple[str, str], NetworkEdge] = {}
+
+        for txn in transactions:
+            # Add source node (account)
+            if txn.account_id not in nodes_dict:
+                nodes_dict[txn.account_id] = NetworkNode(
+                    node_id=txn.account_id,
+                    node_type="account",
+                    label=f"Account {txn.account_id[-6:]}",
+                    total_volume=0,
+                    transaction_count=0
+                )
+
+            nodes_dict[txn.account_id].total_volume += txn.amount
+            nodes_dict[txn.account_id].transaction_count += 1
+
+            # Handle transfers - create edges
+            if txn.counterparty_account and txn.transaction_type in ["transfer_out", "transfer_in"]:
+                # Add counterparty node
+                cp_id = txn.counterparty_account
+                if cp_id not in nodes_dict:
+                    nodes_dict[cp_id] = NetworkNode(
+                        node_id=cp_id,
+                        node_type="account",
+                        label=txn.counterparty_name or f"Account {cp_id[-6:]}",
+                        total_volume=0,
+                        transaction_count=0
+                    )
+
+                # Determine edge direction
+                if txn.transaction_type == "transfer_out":
+                    source, target = txn.account_id, cp_id
+                else:
+                    source, target = cp_id, txn.account_id
+
+                edge_key = (source, target)
+                if edge_key not in edges_dict:
+                    edges_dict[edge_key] = NetworkEdge(
+                        source=source,
+                        target=target,
+                        weight=0,
+                        transaction_count=0,
+                        first_transaction=txn.transaction_date
+                    )
+
+                edges_dict[edge_key].weight += txn.amount
+                edges_dict[edge_key].transaction_count += 1
+                edges_dict[edge_key].last_transaction = txn.transaction_date
+                edges_dict[edge_key].avg_amount = edges_dict[edge_key].weight / edges_dict[edge_key].transaction_count
+
+                # Mark high-risk if counterparty in high-risk country
+                if txn.counterparty_country in HIGH_RISK_COUNTRIES:
+                    edges_dict[edge_key].is_high_risk = True
+
+        # Calculate network density
+        n_nodes = len(nodes_dict)
+        n_edges = len(edges_dict)
+        max_edges = n_nodes * (n_nodes - 1) if n_nodes > 1 else 1
+        density = n_edges / max_edges if max_edges > 0 else 0
+
+        return TransactionNetwork(
+            network_id=f"NET-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+            nodes=list(nodes_dict.values()),
+            edges=list(edges_dict.values()),
+            total_nodes=n_nodes,
+            total_edges=n_edges,
+            network_density=round(density, 4)
+        )
+
+    def calculate_centrality_scores(self, network: TransactionNetwork) -> None:
+        """
+        Calculate centrality scores for network nodes.
+        Uses degree centrality as approximation.
+        """
+        # Count connections for each node
+        connection_counts: Dict[str, int] = defaultdict(int)
+
+        for edge in network.edges:
+            connection_counts[edge.source] += 1
+            connection_counts[edge.target] += 1
+
+        max_connections = max(connection_counts.values()) if connection_counts else 1
+
+        # Update node centrality scores
+        for node in network.nodes:
+            connections = connection_counts.get(node.node_id, 0)
+            node.centrality_score = connections / max_connections if max_connections > 0 else 0
+
+    def detect_communities(self, network: TransactionNetwork) -> int:
+        """
+        Detect communities in the transaction network.
+        Uses simple connected components as approximation.
+
+        Returns number of communities detected.
+        """
+        # Build adjacency list
+        adjacency: Dict[str, set] = defaultdict(set)
+        for edge in network.edges:
+            adjacency[edge.source].add(edge.target)
+            adjacency[edge.target].add(edge.source)
+
+        # Find connected components using BFS
+        visited = set()
+        communities = 0
+
+        for node in network.nodes:
+            if node.node_id not in visited:
+                communities += 1
+                # BFS to find all connected nodes
+                queue = [node.node_id]
+                while queue:
+                    current = queue.pop(0)
+                    if current not in visited:
+                        visited.add(current)
+                        # Find the network node and assign community
+                        for n in network.nodes:
+                            if n.node_id == current:
+                                n.community_id = communities
+                                break
+                        queue.extend(adjacency[current] - visited)
+
+        network.num_communities = communities
+        return communities
+
+    def detect_money_mules(self, network: TransactionNetwork) -> List[str]:
+        """
+        Detect potential money mule accounts.
+        Characteristics: High throughput, many in/out transactions, low retention.
+        """
+        mule_candidates = []
+
+        # Build in/out volume for each node
+        in_volume: Dict[str, float] = defaultdict(float)
+        out_volume: Dict[str, float] = defaultdict(float)
+        in_count: Dict[str, int] = defaultdict(int)
+        out_count: Dict[str, int] = defaultdict(int)
+
+        for edge in network.edges:
+            out_volume[edge.source] += edge.weight
+            in_volume[edge.target] += edge.weight
+            out_count[edge.source] += edge.transaction_count
+            in_count[edge.target] += edge.transaction_count
+
+        for node in network.nodes:
+            node_id = node.node_id
+            total_in = in_volume.get(node_id, 0)
+            total_out = out_volume.get(node_id, 0)
+            count_in = in_count.get(node_id, 0)
+            count_out = out_count.get(node_id, 0)
+
+            # Mule characteristics:
+            # 1. High throughput (both in and out)
+            # 2. Low retention (out ~= in)
+            # 3. Multiple counterparties
+
+            if total_in > 0 and total_out > 0:
+                retention_ratio = abs(total_in - total_out) / max(total_in, total_out)
+                throughput = total_in + total_out
+
+                # Low retention (<10%) and high volume
+                if retention_ratio < 0.1 and throughput > TRANSFER_THRESHOLD_IDR * 2:
+                    if count_in >= 3 and count_out >= 3:
+                        mule_candidates.append(node_id)
+                        node.is_suspicious = True
+                        node.risk_score = min(100, node.risk_score + 40)
+
+        return mule_candidates
+
+    def detect_layering_patterns(
+        self,
+        network: TransactionNetwork
+    ) -> List[Dict[str, Any]]:
+        """
+        Detect layering patterns (funds passing through multiple accounts).
+        Looks for chains of transactions.
+        """
+        layering_patterns = []
+
+        # Build forward adjacency
+        forward: Dict[str, List[Tuple[str, float]]] = defaultdict(list)
+        for edge in network.edges:
+            forward[edge.source].append((edge.target, edge.weight))
+
+        # Find chains longer than 2 hops
+        for start_node in network.nodes:
+            self._find_chains(
+                start_node.node_id,
+                forward,
+                [],
+                0,
+                layering_patterns
+            )
+
+        return layering_patterns
+
+    def _find_chains(
+        self,
+        current: str,
+        forward: Dict[str, List[Tuple[str, float]]],
+        path: List[str],
+        total_amount: float,
+        results: List[Dict[str, Any]],
+        max_depth: int = 5
+    ):
+        """Recursively find transaction chains."""
+        if len(path) > max_depth:
+            return
+
+        path.append(current)
+
+        if len(path) >= 3:
+            # Found a chain of at least 3 nodes
+            results.append({
+                "path": path.copy(),
+                "length": len(path),
+                "total_amount": total_amount,
+                "pattern": "layering_chain"
+            })
+
+        for next_node, amount in forward.get(current, []):
+            if next_node not in path:  # Avoid cycles in this search
+                self._find_chains(
+                    next_node,
+                    forward,
+                    path,
+                    total_amount + amount,
+                    results,
+                    max_depth
+                )
+
+        path.pop()
+
+    def detect_circular_flows(self, network: TransactionNetwork) -> List[List[str]]:
+        """
+        Detect circular flow patterns (funds returning to origin).
+        """
+        circular_flows = []
+
+        # Build adjacency
+        adjacency: Dict[str, List[str]] = defaultdict(list)
+        for edge in network.edges:
+            adjacency[edge.source].append(edge.target)
+
+        # Find cycles using DFS
+        for start_node in network.nodes:
+            visited = set()
+            self._find_cycles(
+                start_node.node_id,
+                start_node.node_id,
+                adjacency,
+                visited,
+                [start_node.node_id],
+                circular_flows
+            )
+
+        return circular_flows
+
+    def _find_cycles(
+        self,
+        start: str,
+        current: str,
+        adjacency: Dict[str, List[str]],
+        visited: set,
+        path: List[str],
+        results: List[List[str]],
+        max_depth: int = 6
+    ):
+        """Recursively find cycles."""
+        if len(path) > max_depth:
+            return
+
+        for neighbor in adjacency.get(current, []):
+            if neighbor == start and len(path) >= 3:
+                # Found a cycle back to start
+                results.append(path.copy())
+            elif neighbor not in visited:
+                visited.add(neighbor)
+                path.append(neighbor)
+                self._find_cycles(start, neighbor, adjacency, visited, path, results, max_depth)
+                path.pop()
+                visited.discard(neighbor)
+
+    def analyze_network(
+        self,
+        transactions: List[TransactionRecord]
+    ) -> GraphAnalysisResult:
+        """
+        Comprehensive graph-based fraud analysis.
+
+        Args:
+            transactions: List of transaction records
+
+        Returns:
+            GraphAnalysisResult with all findings
+        """
+        # Build network
+        network = self.build_transaction_network(transactions)
+
+        # Calculate scores and detect communities
+        self.calculate_centrality_scores(network)
+        self.detect_communities(network)
+
+        # Detect patterns
+        mule_accounts = self.detect_money_mules(network)
+        layering_patterns = self.detect_layering_patterns(network)
+        circular_flows = self.detect_circular_flows(network)
+
+        # Create anomalies list
+        anomalies = []
+
+        # Mule anomalies
+        for mule_id in mule_accounts:
+            anomalies.append(NetworkAnomaly(
+                anomaly_id=f"ANO-MULE-{len(anomalies)+1:04d}",
+                anomaly_type="mule",
+                description=f"Potential money mule account: {mule_id}",
+                involved_nodes=[mule_id],
+                risk_score=75.0,
+                total_amount=sum(e.weight for e in network.edges if e.source == mule_id or e.target == mule_id),
+                evidence=["High throughput with low retention", "Multiple counterparties"]
+            ))
+
+        # Layering anomalies (significant chains only)
+        significant_chains = [p for p in layering_patterns if p["length"] >= 4]
+        for i, chain in enumerate(significant_chains[:10]):  # Top 10
+            anomalies.append(NetworkAnomaly(
+                anomaly_id=f"ANO-LAYER-{i+1:04d}",
+                anomaly_type="layering",
+                description=f"Layering pattern detected: {' -> '.join(chain['path'][:5])}...",
+                involved_nodes=chain["path"],
+                risk_score=60.0 + chain["length"] * 5,
+                total_amount=chain["total_amount"],
+                evidence=[f"Chain length: {chain['length']} hops"]
+            ))
+
+        # Circular flow anomalies
+        for i, cycle in enumerate(circular_flows[:5]):  # Top 5
+            anomalies.append(NetworkAnomaly(
+                anomaly_id=f"ANO-CIRC-{i+1:04d}",
+                anomaly_type="circular",
+                description=f"Circular flow: {' -> '.join(cycle)} -> {cycle[0]}",
+                involved_nodes=cycle,
+                risk_score=80.0,
+                total_amount=0,  # Would need to calculate from edges
+                evidence=["Funds returning to origin through intermediaries"]
+            ))
+
+        # High risk nodes
+        high_risk_nodes = [n for n in network.nodes if n.risk_score >= 50 or n.is_suspicious]
+
+        # Key findings
+        key_findings = []
+        if mule_accounts:
+            key_findings.append(f"Detected {len(mule_accounts)} potential money mule accounts")
+        if significant_chains:
+            key_findings.append(f"Found {len(significant_chains)} layering patterns (4+ hops)")
+        if circular_flows:
+            key_findings.append(f"Identified {len(circular_flows)} circular flow patterns")
+        if high_risk_nodes:
+            key_findings.append(f"{len(high_risk_nodes)} accounts flagged as high risk")
+
+        # Generate narrative
+        narrative = self._generate_graph_narrative(
+            network, anomalies, mule_accounts, layering_patterns, circular_flows
+        )
+
+        return GraphAnalysisResult(
+            analysis_id=self._generate_analysis_id(),
+            network=network,
+            anomalies=anomalies,
+            high_risk_nodes=high_risk_nodes,
+            potential_mule_accounts=mule_accounts,
+            layering_patterns=significant_chains,
+            circular_flows=circular_flows,
+            key_findings=key_findings,
+            narrative=narrative
+        )
+
+    def _generate_graph_narrative(
+        self,
+        network: TransactionNetwork,
+        anomalies: List[NetworkAnomaly],
+        mules: List[str],
+        layers: List[Dict],
+        cycles: List[List[str]]
+    ) -> str:
+        """Generate analysis narrative."""
+        narrative = f"Graph analysis of {network.total_nodes} accounts and {network.total_edges} connections completed. "
+        narrative += f"Network density: {network.network_density:.2%}. "
+
+        if network.num_communities > 1:
+            narrative += f"Detected {network.num_communities} distinct transaction communities. "
+
+        if mules:
+            narrative += f"ALERT: {len(mules)} potential money mule accounts identified - recommend immediate review. "
+
+        if len(layers) > 0:
+            narrative += f"Found {len(layers)} layering patterns suggesting fund obfuscation. "
+
+        if cycles:
+            narrative += f"WARNING: {len(cycles)} circular flow patterns detected - potential round-tripping. "
+
+        if not anomalies:
+            narrative += "No significant network anomalies detected."
+
+        return narrative
+
+
+# ============================================
+# Real-time Anomaly Detection Models
+# ============================================
+
+class AnomalyScore(BaseModel):
+    """Real-time anomaly score for a transaction."""
+    transaction_id: str = Field(..., description="Transaction ID")
+    anomaly_score: float = Field(..., ge=0, le=100, description="Anomaly score 0-100")
+    is_anomaly: bool = Field(..., description="Classified as anomaly")
+    anomaly_type: Optional[str] = Field(None, description="Type of anomaly if detected")
+    contributing_factors: List[str] = Field(default_factory=list)
+    baseline_comparison: Dict[str, float] = Field(default_factory=dict)
+    timestamp: datetime = Field(default_factory=datetime.now)
+
+
+class RollingStatistics(BaseModel):
+    """Rolling statistics for a customer/account."""
+    entity_id: str = Field(..., description="Customer or account ID")
+    window_days: int = Field(default=30, description="Rolling window in days")
+
+    # Volume statistics
+    avg_transaction_amount: float = Field(default=0)
+    std_transaction_amount: float = Field(default=0)
+    total_volume: float = Field(default=0)
+
+    # Frequency statistics
+    avg_daily_transactions: float = Field(default=0)
+    max_daily_transactions: int = Field(default=0)
+
+    # Pattern statistics
+    typical_channels: List[str] = Field(default_factory=list)
+    typical_counterparties: List[str] = Field(default_factory=list)
+    cash_ratio: float = Field(default=0, description="Ratio of cash transactions")
+
+    # Thresholds (adaptive)
+    amount_threshold_high: float = Field(default=0)
+    amount_threshold_low: float = Field(default=0)
+    frequency_threshold: int = Field(default=0)
+
+    last_updated: datetime = Field(default_factory=datetime.now)
+
+
+class RealtimeAnomalyResult(BaseModel):
+    """Result of real-time anomaly detection."""
+    session_id: str = Field(..., description="Detection session ID")
+    transactions_analyzed: int = Field(..., description="Number of transactions analyzed")
+    anomalies_detected: int = Field(..., description="Number of anomalies detected")
+    anomaly_scores: List[AnomalyScore] = Field(default_factory=list)
+    high_priority_alerts: List[str] = Field(default_factory=list)
+    statistics_updated: int = Field(..., description="Number of statistics updated")
+    processing_time_ms: float = Field(..., description="Processing time in milliseconds")
+    timestamp: datetime = Field(default_factory=datetime.now)
+
+
+# ============================================
+# Real-time Anomaly Detector
+# ============================================
+
+class RealtimeAnomalyDetector:
+    """
+    Real-time anomaly detection using statistical methods.
+    Maintains rolling statistics and detects deviations.
+    """
+
+    def __init__(self, contamination: float = 0.05):
+        """
+        Initialize detector.
+
+        Args:
+            contamination: Expected proportion of anomalies (default 5%)
+        """
+        self.contamination = contamination
+        self._statistics_cache: Dict[str, RollingStatistics] = {}
+        self._session_counter = 0
+
+    def _generate_session_id(self) -> str:
+        """Generate unique session ID."""
+        self._session_counter += 1
+        return f"RTA-{datetime.now().strftime('%Y%m%d%H%M%S')}-{self._session_counter:04d}"
+
+    def update_statistics(
+        self,
+        entity_id: str,
+        transactions: List[TransactionRecord],
+        window_days: int = 30
+    ) -> RollingStatistics:
+        """
+        Update rolling statistics for an entity.
+
+        Args:
+            entity_id: Customer or account ID
+            transactions: Historical transactions
+            window_days: Rolling window in days
+
+        Returns:
+            Updated RollingStatistics
+        """
+        # Filter to window
+        cutoff = datetime.now() - timedelta(days=window_days)
+        window_txns = [t for t in transactions if t.transaction_date >= cutoff]
+
+        if not window_txns:
+            return self._statistics_cache.get(entity_id, RollingStatistics(entity_id=entity_id))
+
+        amounts = [t.amount for t in window_txns]
+        avg_amount = np.mean(amounts)
+        std_amount = np.std(amounts) if len(amounts) > 1 else avg_amount * 0.2
+
+        # Daily transaction counts
+        daily_counts: Dict[str, int] = defaultdict(int)
+        for t in window_txns:
+            day_key = t.transaction_date.strftime("%Y-%m-%d")
+            daily_counts[day_key] += 1
+
+        avg_daily = sum(daily_counts.values()) / max(len(daily_counts), 1)
+        max_daily = max(daily_counts.values()) if daily_counts else 0
+
+        # Channels and counterparties
+        channels = list(set(t.channel for t in window_txns))
+        counterparties = list(set(t.counterparty_account for t in window_txns if t.counterparty_account))[:10]
+
+        # Cash ratio
+        cash_count = sum(1 for t in window_txns if t.is_cash)
+        cash_ratio = cash_count / len(window_txns) if window_txns else 0
+
+        # Adaptive thresholds (mean + 2*std for high, mean - 2*std for low)
+        amount_high = avg_amount + 2 * std_amount
+        amount_low = max(0, avg_amount - 2 * std_amount)
+        freq_threshold = int(avg_daily * 3)
+
+        stats = RollingStatistics(
+            entity_id=entity_id,
+            window_days=window_days,
+            avg_transaction_amount=round(avg_amount, 2),
+            std_transaction_amount=round(std_amount, 2),
+            total_volume=sum(amounts),
+            avg_daily_transactions=round(avg_daily, 2),
+            max_daily_transactions=max_daily,
+            typical_channels=channels,
+            typical_counterparties=counterparties,
+            cash_ratio=round(cash_ratio, 4),
+            amount_threshold_high=round(amount_high, 2),
+            amount_threshold_low=round(amount_low, 2),
+            frequency_threshold=freq_threshold
+        )
+
+        self._statistics_cache[entity_id] = stats
+        return stats
+
+    def score_transaction(
+        self,
+        transaction: TransactionRecord,
+        stats: Optional[RollingStatistics] = None
+    ) -> AnomalyScore:
+        """
+        Calculate anomaly score for a single transaction.
+
+        Args:
+            transaction: Transaction to score
+            stats: Rolling statistics (fetched from cache if not provided)
+
+        Returns:
+            AnomalyScore with detailed factors
+        """
+        if stats is None:
+            stats = self._statistics_cache.get(
+                transaction.account_id,
+                RollingStatistics(entity_id=transaction.account_id)
+            )
+
+        score = 0.0
+        factors = []
+        baseline = {}
+
+        # Amount deviation
+        if stats.std_transaction_amount > 0:
+            z_score = abs(transaction.amount - stats.avg_transaction_amount) / stats.std_transaction_amount
+            if z_score > 3:
+                score += 30
+                factors.append(f"Amount deviation: {z_score:.1f} std from mean")
+            elif z_score > 2:
+                score += 15
+                factors.append(f"Unusual amount: {z_score:.1f} std from mean")
+            baseline["amount_z_score"] = round(z_score, 2)
+
+        # Large transaction check
+        if transaction.amount > CASH_THRESHOLD_IDR:
+            score += 20
+            factors.append("Transaction exceeds reporting threshold")
+        elif transaction.amount > stats.amount_threshold_high:
+            score += 10
+            factors.append("Transaction exceeds adaptive threshold")
+
+        # Channel anomaly
+        if stats.typical_channels and transaction.channel not in stats.typical_channels:
+            score += 15
+            factors.append(f"Unusual channel: {transaction.channel}")
+
+        # New counterparty
+        if transaction.counterparty_account:
+            if stats.typical_counterparties and transaction.counterparty_account not in stats.typical_counterparties:
+                score += 10
+                factors.append("New counterparty")
+
+        # High-risk country
+        if transaction.counterparty_country in HIGH_RISK_COUNTRIES:
+            score += 25
+            factors.append(f"High-risk jurisdiction: {transaction.counterparty_country}")
+
+        # Cash transaction (if unusual for this customer)
+        if transaction.is_cash and stats.cash_ratio < 0.1:
+            score += 10
+            factors.append("Unusual cash transaction")
+
+        # Round amount (potential structuring)
+        if transaction.amount > 10_000_000 and transaction.amount % 10_000_000 == 0:
+            score += 10
+            factors.append("Suspiciously round amount")
+
+        # Determine if anomaly
+        is_anomaly = score >= 50
+
+        return AnomalyScore(
+            transaction_id=transaction.transaction_id,
+            anomaly_score=min(100, score),
+            is_anomaly=is_anomaly,
+            anomaly_type=self._determine_anomaly_type(factors) if is_anomaly else None,
+            contributing_factors=factors,
+            baseline_comparison=baseline
+        )
+
+    def _determine_anomaly_type(self, factors: List[str]) -> str:
+        """Determine primary anomaly type from factors."""
+        factor_str = " ".join(factors).lower()
+
+        if "high-risk" in factor_str:
+            return "high_risk_jurisdiction"
+        elif "threshold" in factor_str or "amount" in factor_str:
+            return "unusual_amount"
+        elif "channel" in factor_str:
+            return "unusual_channel"
+        elif "round" in factor_str:
+            return "potential_structuring"
+        elif "counterparty" in factor_str:
+            return "unusual_counterparty"
+        else:
+            return "behavioral_anomaly"
+
+    def detect_anomalies(
+        self,
+        transactions: List[TransactionRecord],
+        historical_data: Optional[Dict[str, List[TransactionRecord]]] = None
+    ) -> RealtimeAnomalyResult:
+        """
+        Detect anomalies in a batch of transactions.
+
+        Args:
+            transactions: Transactions to analyze
+            historical_data: Historical transactions by account ID for statistics
+
+        Returns:
+            RealtimeAnomalyResult with all scores and alerts
+        """
+        import time
+        start_time = time.time()
+
+        session_id = self._generate_session_id()
+        scores = []
+        stats_updated = 0
+
+        # Update statistics if historical data provided
+        if historical_data:
+            for entity_id, hist_txns in historical_data.items():
+                self.update_statistics(entity_id, hist_txns)
+                stats_updated += 1
+
+        # Score each transaction
+        for txn in transactions:
+            stats = self._statistics_cache.get(txn.account_id)
+            score = self.score_transaction(txn, stats)
+            scores.append(score)
+
+        # Identify high priority alerts
+        high_priority = [s.transaction_id for s in scores if s.anomaly_score >= 75]
+
+        processing_time = (time.time() - start_time) * 1000
+
+        return RealtimeAnomalyResult(
+            session_id=session_id,
+            transactions_analyzed=len(transactions),
+            anomalies_detected=sum(1 for s in scores if s.is_anomaly),
+            anomaly_scores=scores,
+            high_priority_alerts=high_priority,
+            statistics_updated=stats_updated,
+            processing_time_ms=round(processing_time, 2)
+        )
+
+
 # Export
 __all__ = [
     # Enums
@@ -859,12 +1667,24 @@ __all__ = [
     "FraudAlert",
     "SARNarrative",
     "FraudAnalysisSummary",
+    # Graph Models
+    "NetworkNode",
+    "NetworkEdge",
+    "TransactionNetwork",
+    "NetworkAnomaly",
+    "GraphAnalysisResult",
+    # Anomaly Models
+    "AnomalyScore",
+    "RollingStatistics",
+    "RealtimeAnomalyResult",
     # Constants
     "CASH_THRESHOLD_IDR",
     "TRANSFER_THRESHOLD_IDR",
     "HIGH_RISK_COUNTRIES",
     # Classes
     "AntiFraudAgent",
+    "TransactionGraphAnalyzer",
+    "RealtimeAnomalyDetector",
     # Functions
     "generate_sample_transactions",
 ]

@@ -35,12 +35,32 @@ class DatabaseSettings(BaseSettings):
     """Database configuration."""
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    # Legacy Neon settings
     host: str = Field(default="", validation_alias=AliasChoices("NEON_HOST", "neon_host"))
     database: str = Field(default="", validation_alias=AliasChoices("NEON_DATABASE", "neon_database"))
     user: str = Field(default="", validation_alias=AliasChoices("NEON_USER", "neon_user"))
     password: str = Field(default="", validation_alias=AliasChoices("NEON_PASSWORD", "neon_password"))
     port: int = Field(default=5432, validation_alias=AliasChoices("NEON_PORT", "neon_port"))
     pool_size: int = Field(default=10, validation_alias=AliasChoices("DATABASE_POOL_SIZE", "database_pool_size"))
+
+    # Supabase settings
+    supabase_url: str = Field(
+        default="https://uzwzundmdlxyitiyhhtn.supabase.co",
+        validation_alias=AliasChoices("SUPABASE_URL", "supabase_url")
+    )
+    supabase_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("SUPABASE_KEY", "supabase_key")
+    )
+    supabase_service_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("SUPABASE_SERVICE_KEY", "supabase_service_key")
+    )
+
+    @property
+    def is_supabase_configured(self) -> bool:
+        """Check if Supabase is configured."""
+        return bool(self.supabase_url and self.supabase_key)
 
     @property
     def connection_string(self) -> str:
